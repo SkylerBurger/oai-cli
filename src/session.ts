@@ -10,7 +10,6 @@ import config from "./config.js";
 import { question } from "./input.js";
 import { Messages } from "./messages.js";
 import { OAIClient } from "./openai.js";
-import { getHeapSpaceStatistics } from "v8";
 
 
 export class Session {
@@ -37,7 +36,8 @@ export class Session {
         console.error(err);
       }
     } else {
-      ln.yellow("  - System Precondition: Not Provided");
+      ln.green("  - System Precondition:")
+      ln.yellow("    Not Provided");
     }
 
     const loadState = await question('Load previous state? [Y/n]: ');
@@ -45,7 +45,7 @@ export class Session {
       try {
         this.messages.loadState();
         ln.green(`  - Message State Input: ${this.messages.length - 1} Messages Loaded`);
-        ln.space();
+        ln.blank();
         ln.green('Previously...'), 
         ln.normal(`${this.messages.last.content}`);
 
@@ -54,10 +54,11 @@ export class Session {
         console.error(err);
       }
     } else {
-      ln.green("  - Message State Input: "), ln.yellow("Not Provided");
+      ln.green("  - Message State Input:"), 
+      ln.yellow("    Not Provided");
     }
 
-    ln.space();
+    ln.blank();
   }
 
   logCost(requestCost: number) {
@@ -96,7 +97,7 @@ export class Session {
     ln.greenBanner("\nRESPONSE:");
     ln.normal(`${responseText}\n`);
     this.logCost(requestCost);
-    ln.space();
+    ln.blank();
     this.messages.saveState();
   }
 
@@ -111,7 +112,7 @@ export class Session {
     ln.yellow("Reloading messages from state...");
     this.messages.reload();
     ln.green(`${this.messages.length} messages loaded...`);
-    ln.space();
+    ln.blank();
     ln.green('Previously...'); 
     ln.normal(`${this.messages.last.content}\n`);
   }
@@ -128,7 +129,7 @@ export class Session {
       ln.red("Error while writing to file:");
       console.error(err);
     }
-    ln.space();
+    ln.blank();
   }
 
   async backupState() {
@@ -143,7 +144,7 @@ export class Session {
       ln.red("Error while writing to file:");
       console.error(err);
     }
-    ln.space();
+    ln.blank();
   }
 
   get actionMap(): { [key: string]: () => Promise<void> | void } {
@@ -159,14 +160,15 @@ export class Session {
 
   async selectAction() {
     ln.blueBanner("Select an action:");
-    ln.blueBanner("[P] Prompt (default) - [B] Backup State - [S] Save Chat - [R] Reload State - [C] Close ");
+    ln.blueBanner("[P] Prompt (default) - [B] Backup State")
+    ln.blueBanner("[S] Save Chat - [R] Reload State - [C] Close ");
     const input = await question("> ");
-    ln.space();
+    ln.blank();
     try {
       await this.actionMap[input]();
     } catch (err) {
       ln.normal("Try again...");
-      ln.space();
+      ln.blank();
     }
     this.selectAction();
   }

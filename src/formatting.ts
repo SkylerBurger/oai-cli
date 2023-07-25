@@ -11,6 +11,6 @@ export default {
   red: render(chalk.red),
   blueBanner: render(chalk.bgBlue),
   greenBanner: render(chalk.bgGreen),
-  space: () => console.log(),
+  blank: () => console.log(),
   normal: (s: string) => console.log(s),
 }

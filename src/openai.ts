@@ -9,6 +9,15 @@ import {
 import config from "./config.js";
 
 
+interface RateLimits {
+  requestsLimit: string,
+  requestsRemaining: string,
+  requestsResetCountdown: string,
+  tokenLimit: string,
+  tokensRemaining: string,
+  tokensResetCountdown: string,
+}
+
 const configureApi = () => {
   if (!config.OPENAI_API_KEY) throw Error("Missing OpenAI API Key.");
 
@@ -21,7 +30,7 @@ const configureApi = () => {
 
 export class OAIClient {
   api: OpenAIApi;
-  rateLimits: any;
+  rateLimits: RateLimits | null;
   tokenUsage: CreateCompletionResponseUsage | null;
 
   constructor() {
