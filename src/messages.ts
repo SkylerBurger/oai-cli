@@ -62,17 +62,24 @@ export class Messages {
     this.loadState();
   }
 
-  writeToFile() {
+  saveState(filename: string | null = null) {
     if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
+    if (!filename) filename = "messages_state"
     writeFileSync(
-      `${config.OUTPUT_PATH}/messages_state.json`,
+      `${config.OUTPUT_PATH}/${filename}.json`,
       JSON.stringify(this.list, null, 4),
       'utf-8',
     );
   }
 
-  backupMessageState() {
-
+  backupMessagesState(filename:string) {
+    if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
+    if (!filename) filename = "messages_state"
+    writeFileSync(
+      `${config.OUTPUT_PATH}/${filename}.json`,
+      JSON.stringify(this.list, null, 4),
+      'utf-8',
+    );
   }
 
   saveChatToFile(filename: string) {

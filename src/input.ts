@@ -6,8 +6,8 @@ const commandLineReader = readline.createInterface({
   output: process.stdout,
 });
 
-export const question = (query: string) => {
+export const question = (query: string): Promise<string> => {
   return new Promise((resolve) => {
-    commandLineReader.question(query, ans => resolve(ans))
+    commandLineReader.question(query, ans => resolve(ans));
   });
 };

@@ -5,11 +5,12 @@ import {
   writeFileSync, 
 } from "fs";
 
-import { chalk_, alarm, good, notice } from "./chalk.js";
+import ln from "./formatting.js";
 import config from "./config.js";
 import { question } from "./input.js";
 import { Messages } from "./messages.js";
 import { OAIClient } from "./openai.js";
+import { getHeapSpaceStatistics } from "v8";
 
 
 export class Session {
@@ -24,119 +25,148 @@ export class Session {
   }
 
   async load() {
-    console.log(chalk_.bgGreen("STARTING UP!"));
+    ln.greenBanner("STARTING UP!");
 
     const loadCondition = await question('Load systen precondition? [Y/n]: ');
-      // TODO: better handling of condition here and again for previous state
-      if ((loadCondition as string).toLowerCase() === "y" || (loadCondition as string).toLowerCase() === "") {
-        try {
-          this.messages.loadPrecondition();
-          console.log(good("  - System Precondition: Loaded"));
-        } catch (err) {
-          console.log(alarm("  - System Precondition: Not loaded - Failure"));
-          console.error(err);
-        }
-      } else {
-        console.log(notice("  - System Precondition: Not Provided"));
+    if (["y", ""].includes(loadCondition.toLowerCase())) {
+      try {
+        this.messages.loadPrecondition();
+        ln.green("  - System Precondition: Loaded");
+      } catch (err) {
+        ln.red("  - System Precondition: Not loaded - Failure");
+        console.error(err);
       }
+    } else {
+      ln.yellow("  - System Precondition: Not Provided");
+    }
 
     const loadState = await question('Load previous state? [Y/n]: ');
-      if ((loadState as string).toLowerCase() === "y" || (loadState as string).toLowerCase() === "") {
-        try {
-          this.messages.loadState();
-          console.log(good(`  - Message State Input: ${this.messages.length - 1} Messages Loaded`));
-          console.log('\n', good('Previously...'), `\n${this.messages.last.content}`);
+    if (["y", ""].includes(loadState.toLowerCase())) {
+      try {
+        this.messages.loadState();
+        ln.green(`  - Message State Input: ${this.messages.length - 1} Messages Loaded`);
+        ln.space();
+        ln.green('Previously...'), 
+        ln.normal(`${this.messages.last.content}`);
 
-        } catch (err) {
-          console.log(alarm("  - Message State Input: Not loaded - Failure"));
-          console.error(err);
-        }
-      } else {
-        console.log(good("  - Message State Input: "), notice("Not Provided"));
+      } catch (err) {
+        ln.red("  - Message State Input: Not loaded - Failure");
+        console.error(err);
       }
+    } else {
+      ln.green("  - Message State Input: "), ln.yellow("Not Provided");
+    }
 
-      console.log("\n");
+    ln.space();
   }
 
-  writeCostToFile(requestCost: number) {
-    let costString = `Estimates - Request: $${requestCost.toFixed(3)} - Session: $${this.sessionCost.toFixed(3)}`;
-    costString += ` - Messages: ${this.messages.length}`;
-    costString += "\n";
+  logCost(requestCost: number) {
+    this.sessionCost += requestCost;
+
+    let costString = "Estimates" + 
+      `- Request: $${requestCost.toFixed(3)} ` + 
+      `- Session: $${this.sessionCost.toFixed(3)} ` + 
+      `- Messages: ${this.messages.length}\n`;
     const costLogPath = `${config.OUTPUT_PATH}/cost_log.txt`;
 
     try {
       appendFileSync(costLogPath, costString);
     } catch (err) {
-      console.log(notice('Cost Log file did not exist, creating now...'));
+      ln.yellow('Cost Log file did not exist, creating now...');
       if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
       writeFileSync(costLogPath, costString, "utf-8");
     }
-  }
-  
-  logCost(requestCost: number) {
-    this.sessionCost += requestCost;
-    console.log(notice(`Estimated cost of request: $${requestCost.toFixed(3)}`));
-    console.log(notice(`Estimated cost of session: $${this.sessionCost.toFixed(3)}`));
+
+    ln.yellow(`Estimated cost of request: $${requestCost.toFixed(3)}`);
+    ln.yellow(`Estimated cost of session: $${this.sessionCost.toFixed(3)}`);
   }
 
   async prompt() {
-    console.log(chalk_.bgBlue("Prompt:"));
+    ln.blueBanner("Prompt:");
     const input = await question("> ");
+    if (!input) return;
     const promptMessage = this.client.createMessage("user", (input as string));
     this.messages.push(promptMessage);
-    console.log(notice("Awaiting reply..."));
+    ln.yellow("Awaiting reply...");
 
     const { responseText, requestCost } = await this.client.requestChatCompletion(this.messages.list);
     const responseMessage = this.client.createMessage("assistant", responseText);
     this.messages.push(responseMessage);
-    this.logCost(requestCost);
-    this.writeCostToFile(requestCost);
     // TODO: log token usage/limits
-    console.log(chalk_.bgGreen("\nRESPONSE:"), `\n${responseText}\n`);
-    this.messages.writeToFile();
+    ln.greenBanner("\nRESPONSE:");
+    ln.normal(`${responseText}\n`);
+    this.logCost(requestCost);
+    ln.space();
+    this.messages.saveState();
   }
 
   async compress() {
-    console.log(notice("Compressing via summary...")); 
+    ln.yellow("Compressing via summary..."); 
     const requestCost = await this.messages.compress(this.client);
     this.logCost(requestCost);
-    this.writeCostToFile(requestCost);
     // TODO:: log token usage/limits
   }
 
   reload() {
-    console.log(notice("Reloading messages from state..."))
+    ln.yellow("Reloading messages from state...");
     this.messages.reload();
-    console.log(notice(`${this.messages.length} messages loaded...`))
-    console.log('\n', good('Previously...'), `\n${this.messages.last.content}\n`);
+    ln.green(`${this.messages.length} messages loaded...`);
+    ln.space();
+    ln.green('Previously...'); 
+    ln.normal(`${this.messages.last.content}\n`);
   }
 
   async save() {
-    let prefix = await question("Filename? [Default]: ");
-    if (prefix === '') prefix = "Chat_";
+    let prefix = await question("Filename? ['chat']: ") || "chat";
     const timestamp = new Date().getTime().toString();
     const filename = `${prefix} - ${timestamp}`;
-    this.messages.saveChatToFile(filename);
+    try {
+      ln.yellow("Writing chat to file...");
+      this.messages.saveChatToFile(filename);
+      ln.green("~ Finished ~");
+    } catch (err) {
+      ln.red("Error while writing to file:");
+      console.error(err);
+    }
+    ln.space();
+  }
+
+  async backupState() {
+    let prefix = await question("Filename? ['messages_state']: ") || "messages_state";
+    const timestamp = new Date().getTime().toString();
+    const filename = `${prefix} - ${timestamp}`;
+    try {
+      ln.yellow("Backing up state to file...");
+      this.messages.backupMessagesState(filename);
+      ln.green("~ Finished ~");
+    } catch (err) {
+      ln.red("Error while writing to file:");
+      console.error(err);
+    }
+    ln.space();
+  }
+
+  get actionMap(): { [key: string]: () => Promise<void> | void } {
+    return {
+      "": async () => await this.prompt(),
+      "b": async () => await this.backupState(),
+      "c": () => process.exit(),
+      "p": async () => await this.prompt(),
+      "r": () => this.reload(),
+      "s": async () => this.save(),
+    }
   }
 
   async selectAction() {
-    console.log(chalk_.bgBlue("Select an action:"));
-    const input = await question("[P] Prompt - [S] Save - [R] Reload - [C] Close: ");
-    switch((input as string).toLowerCase()) {
-      case "c":
-        process.exit();
-      case "p":
-        await this.prompt();
-        break;
-      case "r":
-        this.reload();
-        break;
-      case "s":
-        await this.save();
-        break;
-      default:
-        await this.selectAction();
-        break;
+    ln.blueBanner("Select an action:");
+    ln.blueBanner("[P] Prompt (default) - [B] Backup State - [S] Save Chat - [R] Reload State - [C] Close ");
+    const input = await question("> ");
+    ln.space();
+    try {
+      await this.actionMap[input]();
+    } catch (err) {
+      ln.normal("Try again...");
+      ln.space();
     }
     this.selectAction();
   }
