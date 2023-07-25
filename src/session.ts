@@ -1,4 +1,9 @@
-import { appendFileSync } from "fs";
+import { 
+  appendFileSync, 
+  existsSync, 
+  mkdirSync, 
+  writeFileSync, 
+} from "fs";
 
 import { chalk_, alarm, good, notice } from "./chalk.js";
 import config from "./config.js";
@@ -57,11 +62,15 @@ export class Session {
     let costString = `Estimates - Request: $${requestCost.toFixed(3)} - Session: $${this.sessionCost.toFixed(3)}`;
     costString += ` - Messages: ${this.messages.length}`;
     costString += "\n";
+    const costLogPath = `${config.OUTPUT_PATH}/cost_log.txt`;
 
-    appendFileSync(
-      `${config.OUTPUT_PATH}/cost_log.txt`,
-      costString,
-    );
+    try {
+      appendFileSync(costLogPath, costString);
+    } catch (err) {
+      console.log(notice('Cost Log file did not exist, creating now...'));
+      if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
+      writeFileSync(costLogPath, costString, "utf-8");
+    }
   }
   
   logCost(requestCost: number) {
@@ -99,6 +108,7 @@ export class Session {
     console.log(notice("Reloading messages from state..."))
     this.messages.reload();
     console.log(notice(`${this.messages.length} messages loaded...`))
+    console.log('\n', good('Previously...'), `\n${this.messages.last.content}\n`);
   }
 
   async selectAction() {
@@ -107,12 +117,16 @@ export class Session {
     switch((input as string).toLowerCase()) {
       case "c":
         process.exit();
+        break;
       case "p":
         await this.prompt();
+        break;
       case "r":
         this.reload();
+        break;
       default:
         await this.selectAction();
+        break;
     }
     await this.selectAction();
   }

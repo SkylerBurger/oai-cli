@@ -1,10 +1,14 @@
-import { readFileSync, writeFileSync } from "fs";
-import {
-  ChatCompletionRequestMessage
-} from "openai";
+import { 
+  existsSync, 
+  mkdirSync, 
+  readFileSync, 
+  writeFileSync, 
+} from "fs";
+import { ChatCompletionRequestMessage } from "openai";
 
 import config from "./config.js";
 import { OAIClient } from "./openai.js";
+
 
 export class Messages {
   list: ChatCompletionRequestMessage[];
@@ -58,8 +62,9 @@ export class Messages {
   }
 
   writeToFile() {
+    if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
     writeFileSync(
-      `${config.OUTPUT_PATH}/message_state.json`,
+      `${config.OUTPUT_PATH}/messages_state.json`,
       JSON.stringify(this.list, null, 4),
       'utf-8',
     );
