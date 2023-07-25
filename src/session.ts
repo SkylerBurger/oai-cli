@@ -117,7 +117,6 @@ export class Session {
     switch((input as string).toLowerCase()) {
       case "c":
         process.exit();
-        break;
       case "p":
         await this.prompt();
         break;
