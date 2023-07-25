@@ -1,4 +1,5 @@
 import { 
+  appendFileSync,
   existsSync, 
   mkdirSync, 
   readFileSync, 
@@ -68,6 +69,38 @@ export class Messages {
       JSON.stringify(this.list, null, 4),
       'utf-8',
     );
+  }
+
+  backupMessageState() {
+
+  }
+
+  saveChatToFile(filename: string) {
+    if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
+    const filepath = `${config.OUTPUT_PATH}/${filename}.txt`;
+    const messagesCopy = [...this.list];
+
+    writeFileSync(
+      filepath,
+      '',
+      'utf-8',
+    );
+
+    for (let i = 0; i < messagesCopy.length; i++) {
+      const roleMap = {
+        user: "Prompt",
+        system: "System",
+        assistant: "Response",
+        function: "Function",
+      }
+      let role = roleMap[messagesCopy[i]['role']];
+      const content = messagesCopy[i]['content'];
+      
+      appendFileSync(
+        filepath,
+        `${role}:\n${content}\n\n`,  
+      )
+    }
   }
 
   async compress(client: OAIClient) { 

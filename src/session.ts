@@ -111,6 +111,14 @@ export class Session {
     console.log('\n', good('Previously...'), `\n${this.messages.last.content}\n`);
   }
 
+  async save() {
+    let prefix = await question("Filename? [Default]: ");
+    if (prefix === '') prefix = "Chat_";
+    const timestamp = new Date().getTime().toString();
+    const filename = `${prefix} - ${timestamp}`;
+    this.messages.saveChatToFile(filename);
+  }
+
   async selectAction() {
     console.log(chalk_.bgBlue("Select an action:"));
     const input = await question("[P] Prompt - [S] Save - [R] Reload - [C] Close: ");
@@ -123,11 +131,14 @@ export class Session {
       case "r":
         this.reload();
         break;
+      case "s":
+        await this.save();
+        break;
       default:
         await this.selectAction();
         break;
     }
-    await this.selectAction();
+    this.selectAction();
   }
 
 }
