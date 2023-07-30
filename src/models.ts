@@ -1,20 +1,63 @@
-class GPTModel {
+interface ContextSize {
   name: string;
   maxTokens: number;
   inputCost: number;
-  outputCost: number;
+  outputCost: number
+  tokenDenominator: number;
+}
 
-  constructor(name:string, maxTokens: number, inputCost: number, outputCost: number) {
-    this.name = name;
-    this.maxTokens = maxTokens;
-    this.inputCost = inputCost;
-    this.outputCost = outputCost;
+export class GPTModel {
+  contextSizes: ContextSize[];
+  currentSizeIndex: number;
+
+  constructor(contextSizes: ContextSize[] = []) {
+    this.contextSizes = contextSizes;
+    this.currentSizeIndex = 0;
+  }
+
+  get name() {
+    return this.contextSizes[this.currentSizeIndex].name;
+  }
+
+  get maxTokens() {
+    return this.contextSizes[this.currentSizeIndex].maxTokens;
+  }
+
+  get inputCost() {
+    return this.contextSizes[this.currentSizeIndex].inputCost;
+  }
+
+  get outputCost() {
+    return this.contextSizes[this.currentSizeIndex].outputCost;
+  }
+
+  get tokenDenominator() {
+    return this.contextSizes[this.currentSizeIndex].tokenDenominator;
+  }
+
+  downscale() {
+    if (this.currentSizeIndex > 0) {
+      this.currentSizeIndex--;
+    }
+  }
+
+  upscale() {
+    if (this.currentSizeIndex + 1 < this.contextSizes.length) {
+      this.currentSizeIndex++;
+    }
   }
 }
 
-export default {
-  "gpt-3.5": new GPTModel("gpt-3.5-turbo", 4096, .00015, .0002),
-  "gpt-3.5-16k": new GPTModel("gpt-3.5-turbo-16k", 16384, .003, .004),
-  "gpt-4": new GPTModel("gpt-4", 8192, .003, .006),
-  "gpt-4-32k": new GPTModel("gpt-4-32k", 32768, .006, .12)
-}
+export const gpt3 = new GPTModel(
+  [
+    { name: "gpt-3.5-turbo", maxTokens: 4096, inputCost: .0015, outputCost: .002, tokenDenominator: 1000},
+    { name: "gpt-3.5-turbo-16k", maxTokens: 16384, inputCost: .003, outputCost: .004, tokenDenominator: 1000},
+  ]
+)
+
+export const gpt4 = new GPTModel(
+  [
+    { name: "gpt-4", maxTokens: 8192, inputCost: .003, outputCost: .006, tokenDenominator: 1000},
+    { name: "gpt-4-32k", maxTokens: 32768, inputCost: .006, outputCost: .012, tokenDenominator: 1000},
+  ]
+)

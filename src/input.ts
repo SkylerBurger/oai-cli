@@ -1,5 +1,7 @@
 import readline from "readline";
 
+import ln from "./formatting.js";
+
 
 const commandLineReader = readline.createInterface({
   input: process.stdin,
@@ -8,6 +10,7 @@ const commandLineReader = readline.createInterface({
 
 export const question = (query: string): Promise<string> => {
   return new Promise((resolve) => {
-    commandLineReader.question(query, ans => resolve(ans));
+    ln.orange(query);
+    commandLineReader.question("> ", ans => resolve(ans));
   });
 };

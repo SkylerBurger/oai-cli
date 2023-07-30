@@ -1,7 +1,8 @@
 import { 
   appendFileSync, 
   existsSync, 
-  mkdirSync, 
+  mkdirSync,
+  readFileSync, 
   writeFileSync, 
 } from "fs";
 
@@ -9,38 +10,36 @@ import ln from "./formatting.js";
 import config from "./config.js";
 import { question } from "./input.js";
 import { Messages } from "./messages.js";
+import { gpt3 } from "./models.js";
 import { OAIClient } from "./openai.js";
+import { CreateCompletionResponseUsage } from "openai";
 
+
+interface Condition {
+  name: string;
+  condition: string;
+}
 
 export class Session {
   client: OAIClient;
+  conditionIndex: number;
+  conditions: Condition[];
   messages: Messages;
   sessionCost: number;
 
   constructor() {
-    this.client = new OAIClient;
+    this.client = new OAIClient(gpt3);
+    this.conditionIndex = 0;
+    this.conditions = [];
     this.messages = new Messages();
     this.sessionCost = 0;
   }
 
   async load() {
     ln.greenBanner("STARTING UP!");
+    await this.loadConditions();
 
-    const loadCondition = await question('Load systen precondition? [Y/n]: ');
-    if (["y", ""].includes(loadCondition.toLowerCase())) {
-      try {
-        this.messages.loadPrecondition();
-        ln.green("  - System Precondition: Loaded");
-      } catch (err) {
-        ln.red("  - System Precondition: Not loaded - Failure");
-        console.error(err);
-      }
-    } else {
-      ln.green("  - System Precondition:")
-      ln.yellow("    Not Provided");
-    }
-
-    const loadState = await question('Load previous state? [Y/n]: ');
+    const loadState = await question('Load previous state? [Y/n]');
     if (["y", ""].includes(loadState.toLowerCase())) {
       try {
         this.messages.loadState();
@@ -59,6 +58,81 @@ export class Session {
     }
 
     ln.blank();
+  }
+
+  get condition() {
+    return this.conditions[this.conditionIndex];
+  }
+
+  async loadConditions() {
+    const loadCondition = await question('Load systen precondition? [Y/n]');
+    if (["y", ""].includes(loadCondition.toLowerCase())) {
+      try {
+        const filename = `${config.INPUT_PATH}/conditions.json`;
+        const fileContent = readFileSync(filename, "utf-8");
+        this.conditions = JSON.parse(fileContent);
+        ln.green("  - Conditions: Loaded");
+        ln.blank()
+        await this.selectCondition();
+      } catch (err) {
+        ln.red("  - Conditions: Not loaded - Failure");
+        console.error(err);
+      }
+    } else {
+      const addConditionAnswer = await question('Add a condition? [Y/n]');
+      if (["y", ""].includes(addConditionAnswer.toLowerCase())) {
+        await this.addCondition();
+      }
+      const saveConditions = await question('Save current conditions to file? [Y/n]');
+      if (["y", ""].includes(saveConditions.toLowerCase())) {
+        await this.saveConditions();
+      }
+    }
+    ln.blank();
+  }
+
+  async addCondition() {
+    const name = await question('Condition Name: ');
+    const conditionText = await question('Condition Instructions: ');
+    this.conditions.push({ name, condition: conditionText});
+    this.conditionIndex = this.conditions.length - 1;
+    ln.green(`  - Condition: "${this.condition.name}" added and set`);
+  }
+
+  async selectCondition() {
+    for(let i = 0; i < this.conditions.length; i++) {
+      ln.blueBanner(`[${i}] ${this.conditions[i].name}`);
+      ln.normal(this.conditions[i].condition);
+      ln.blank();
+    }
+    const response = await question("Enter number or [c]ancel");
+    if (["c", ""].includes(response.toLowerCase())) {
+      ln.yellow("Skipping...");
+      return;
+    }
+    try {
+      this.conditionIndex = parseInt(response);
+      this.messages.loadCondition(this.condition.condition);
+      ln.green(`  - Condition: "${this.condition.name}" Loaded`);
+    } catch (err) {
+      ln.red("  - Condition: Failed to load");
+      console.error(err);
+    }
+  }
+
+  saveConditions() {
+    if (!existsSync(config.INPUT_PATH)) mkdirSync(config.INPUT_PATH);
+    try {
+      writeFileSync(
+        `${config.INPUT_PATH}/conditions.json`,
+        JSON.stringify(this.conditions),
+        "utf-8",
+      );
+      ln.green("  - Conditions: Saved to file");
+    } catch (err) {
+      ln.red("Error while saving conditions to file...");
+      console.error(err);
+    }
   }
 
   logCost(requestCost: number) {
@@ -82,21 +156,30 @@ export class Session {
     ln.yellow(`Estimated cost of session: $${this.sessionCost.toFixed(3)}`);
   }
 
-  async prompt() {
-    ln.blueBanner("Prompt:");
-    const input = await question("> ");
-    if (!input) return;
-    const promptMessage = this.client.createMessage("user", (input as string));
-    this.messages.push(promptMessage);
-    ln.yellow("Awaiting reply...");
+  logTokens(tokenUsage: CreateCompletionResponseUsage) {
+    ln.yellow(`Request Tokens: ${tokenUsage['prompt_tokens']}`);
+    ln.yellow(`Response Tokens: ${tokenUsage['completion_tokens']}`);
+    ln.yellow(`Total Tokens: ${tokenUsage['total_tokens']}`);
+  }
 
-    const { responseText, requestCost } = await this.client.requestChatCompletion(this.messages.list);
-    const responseMessage = this.client.createMessage("assistant", responseText);
-    this.messages.push(responseMessage);
-    // TODO: log token usage/limits
+  async prompt() {
+    const input = await question("Prompt");
+    if (!input) return;
+    this.messages.addMessage("user", input);
+    ln.yellow("Awaiting reply...");
+    let response;
+    try {
+      response = await this.client.requestChatCompletion(this.messages.current());
+    } catch (err) {
+      ln.red("Error while requesting chat completion...");
+      console.error(err);
+      return
+    }
+    this.messages.addMessage("assistant", response.message.content);
     ln.greenBanner("\nRESPONSE:");
-    ln.normal(`${responseText}\n`);
-    this.logCost(requestCost);
+    ln.normal(`${response.message.content}\n`);
+    this.logCost(response.cost);
+    if (response.tokenUsage) this.logTokens(response.tokenUsage);
     ln.blank();
     this.messages.saveState();
   }
@@ -162,7 +245,7 @@ export class Session {
     ln.blueBanner("Select an action:");
     ln.blueBanner("[P] Prompt (default) - [B] Backup State")
     ln.blueBanner("[S] Save Chat - [R] Reload State - [C] Close ");
-    const input = await question("> ");
+    const input = await question("");
     ln.blank();
     try {
       await this.actionMap[input]();

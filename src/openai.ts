@@ -1,12 +1,13 @@
 import {
   ChatCompletionRequestMessage,
-  ChatCompletionRequestMessageRoleEnum,
   CreateCompletionResponseUsage,
   Configuration,
   OpenAIApi,
 } from "openai";
 
 import config from "./config.js";
+import { Message } from "./message.js";
+import { GPTModel } from "./models.js";
 
 
 interface RateLimits {
@@ -32,27 +33,23 @@ export class OAIClient {
   api: OpenAIApi;
   rateLimits: RateLimits | null;
   tokenUsage: CreateCompletionResponseUsage | null;
+  model: GPTModel;
 
-  constructor() {
+  constructor(model: GPTModel) {
     this.api = configureApi();
+    this.model = model;
     this.rateLimits = null;
     this.tokenUsage = null;
-  }
-
-  createMessage(role: ChatCompletionRequestMessageRoleEnum, content: string): ChatCompletionRequestMessage {
-    return { role, content };
   }
 
   calculateRequestCost() {
     if (!this.tokenUsage) return 0;
 
-    const tokenDenominator = 1000;
-    const inputCost = 0.003;
-    const outputCost = 0.004;
-
     // Calculation from OpenAI Docs: https://openai.com/pricing
     // (200 * 0.0015 + 850 * 0.002) / 1000 = $0.002
-    return (this.tokenUsage.prompt_tokens * inputCost + this.tokenUsage.completion_tokens * outputCost) / tokenDenominator;
+    return (this.tokenUsage.prompt_tokens * this.model.inputCost 
+      + this.tokenUsage.completion_tokens * this.model.outputCost) 
+      / this.model.tokenDenominator;
   }
 
   processRateLimits(headers: any) {
@@ -68,23 +65,29 @@ export class OAIClient {
   }
 
   async requestChatCompletion(messages: ChatCompletionRequestMessage[]) {
+    // TODO: Check if request fits current contextSize, upscale
+    // If ((total_tokens + max_tokens) >= model_max_tokens) switch model;
+    // Maybe a separate function because it will need to check next contextSize to see if it fits
+    // Otherwise the current chat needs to be compressed and archived.
+
     const response = await this.api.createChatCompletion({
-      model: config.GPT_MODEL,
+      model: this.model.name,
       messages: messages,
+      // max_tokens: 400,
     });
     this.tokenUsage = response.data.usage || null;
     this.processRateLimits(response.request.res.headers || null);
-    const responseText: string = response.data?.choices[0]?.message?.content || "NO RESPONSE FOUND";
-    const requestCost: number = this.calculateRequestCost();
-    return { responseText, requestCost };
+    const content: string = response.data?.choices[0]?.message?.content || "NO RESPONSE FOUND";
+    const assistantMessage = new Message("assistant", content)
+    const cost: number = this.calculateRequestCost();
+    return { message: assistantMessage, cost, tokenUsage: this.tokenUsage };
   }
 
-  async requestChatSummary(messages: ChatCompletionRequestMessage[], logCost: boolean) {
+  async requestChatSummary(messages: ChatCompletionRequestMessage[]) {
     const summaryRequestPrompt =
       "Please summarize the chat so far into a single paragraph that GPT would understand as a system message.";
     let summaryRequestMessages: ChatCompletionRequestMessage[] = messages.slice(1);
-    summaryRequestMessages.push(this.createMessage("user", summaryRequestPrompt));
-
+    summaryRequestMessages.push({ role: "user", content: summaryRequestPrompt});
     return await this.requestChatCompletion(summaryRequestMessages);
   }
 }
