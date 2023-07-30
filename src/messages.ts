@@ -2,7 +2,6 @@ import {
   appendFileSync,
   existsSync, 
   mkdirSync, 
-  readFileSync, 
   writeFileSync, 
 } from "fs";
 import { 
@@ -18,19 +17,19 @@ import { OAIClient } from "./openai.js";
 export class Messages {
   archive: Message[];
   list: Message[];
-  precondition: Message | null;
 
   constructor(messages = []) {
     this.archive = [];
     this.list = messages;
-    this.precondition = null;
   }
 
-  addMessage(role: ChatCompletionRequestMessageRoleEnum, text: string) {
-    this.push(new Message(role, text));
+  addMessage(role: ChatCompletionRequestMessageRoleEnum, text: string, tokens: number | null = null) {
+    const newMessage = new Message(role,text);
+    if (tokens) newMessage.tokens = tokens;
+    this.push(newMessage);
   }
 
-  current(): ChatCompletionRequestMessage[] {
+  recent(): ChatCompletionRequestMessage[] {
     return this.list.map(message => {
       return {role: message.role, content: message.content};
     })
@@ -60,28 +59,13 @@ export class Messages {
     this.push(new Message("system", condition));
   }
 
-  loadState() {
-    const fileContent = readFileSync(`${config.OUTPUT_PATH}/messages_state.json`, "utf-8");
-    const messageStateInput = JSON.parse(fileContent);
-    this.concat(messageStateInput as Message[]);
-  }
-
-  reload() {
-    this.list = [];
-    if (this.precondition) {
-      this.push(this.precondition);
+  loadMessages(archive: Message[], recent: Message[]) {
+    for(let i=0; i < archive.length; i++) {
+      this.addMessage(archive[i].role, archive[i].content, archive[i].tokens);
     }
-    this.loadState();
-  }
-
-  saveState(filename: string | null = null) {
-    if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
-    if (!filename) filename = "messages_state"
-    writeFileSync(
-      `${config.OUTPUT_PATH}/${filename}.json`,
-      JSON.stringify(this.list, null, 4),
-      'utf-8',
-    );
+    for(let i=0; i < recent.length; i++) {
+      this.addMessage(recent[i].role, recent[i].content, recent[i].tokens);
+    }
   }
 
   backupMessagesState(filename:string) {
@@ -120,11 +104,8 @@ export class Messages {
   async compress(client: OAIClient) { 
     const response = await client.requestChatSummary(this.list);
     const summaryMessage = new Message("system", `Chat History: ${response.message.content}`);
-    this.archive = this.archive.concat(this.list.slice(1));  // TODO: Refine this
+    this.archive = this.archive.concat(this.list.slice(1));
     this.list = [this.list[0], summaryMessage];
-    return response.cost;
+    return response;
   }
-
-  // Serialize
-  // DeSerialize
 }

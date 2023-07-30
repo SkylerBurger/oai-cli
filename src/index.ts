@@ -1,7 +1,7 @@
-import { Session } from "./session.js";
+import { Chat } from "./chat.js";
 
 
-const session = new Session();
+const chat = new Chat();
 
-await session.configure();
-session.begin();
+await chat.configure();
+chat.begin();

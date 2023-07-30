@@ -1,8 +1,7 @@
+.env
 /build
+/chats
 /development
 /input
 /node_modules
 /output
-
-.env
-precondition.json

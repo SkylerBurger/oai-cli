@@ -9,6 +9,7 @@ import {
 import ln from "./formatting.js";
 import config from "./config.js";
 import { question } from "./input.js";
+import { Message } from "./message.js";
 import { Messages } from "./messages.js";
 import { gpt3 } from "./models.js";
 import { OAIClient } from "./openai.js";
@@ -20,45 +21,66 @@ interface Condition {
   condition: string;
 }
 
-export class Session {
+interface ChatState {
+  messages: {
+    archive: Message[];
+    list: Message[];
+  };
+  condition: {
+    name: string;
+    condition: string;
+  };
+}
+
+export class Chat {
   client: OAIClient;
   conditionIndex: number;
   conditions: Condition[];
   messages: Messages;
-  sessionCost: number;
+  chatCost: number;
 
   constructor() {
     this.client = new OAIClient(gpt3);
     this.conditionIndex = 0;
     this.conditions = [];
     this.messages = new Messages();
-    this.sessionCost = 0;
+    this.chatCost = 0;
   }
 
   async configure() {
     ln.greenBanner("STARTING UP!");
-    await this.loadConditions();
-
-    const loadState = await question('Load previous state? [Y/n]');
-    if (["y", ""].includes(loadState.toLowerCase())) {
+    const loadChatReply = await question("Reload previous chat? [y/N]");
+    if (loadChatReply.toLowerCase() === "y") {
       try {
-        this.messages.loadState();
-        ln.green(`Message State Input: ${this.messages.length - 1} Messages Loaded`);
+        await this.loadChat();
+        ln.green(`Chat: ${this.messages.length - 1} Messages Loaded`);
         ln.blank();
         ln.green('Previously...'), 
         ln.normal(`${this.messages.last.content}`);
-
       } catch (err) {
-        ln.red("Message State Input: Not loaded - Failure");
+        ln.red("Chat: Error while loading previous chat");
         console.error(err);
       }
     } else {
-      ln.yellow("Skipping...");
+      ln.yellow("Skipping...")
+      ln.blank();
+      await this.loadConditions();
     }
 
     ln.blank();
-    ln.green("Session ready...");
+    ln.green("Chat ready...");
     ln.blank();
+  }
+
+  async loadChat() { 
+    const filename = await question(`Name of JSON file in chats directory (${config.CHATS_PATH})`);
+    const chatString = readFileSync(
+      `${config.CHATS_PATH}/${filename}.json`,
+      "utf-8",
+    )
+    const chatState: ChatState = JSON.parse(chatString);
+    this.messages.loadMessages(chatState.messages.archive, chatState.messages.list);
+    this.addCondition(chatState.condition.name, chatState.condition.condition);
   }
 
   get condition() {
@@ -82,19 +104,18 @@ export class Session {
     } else {
       const addConditionAnswer = await question('Add a condition? [Y/n]');
       if (["y", ""].includes(addConditionAnswer.toLowerCase())) {
-        await this.addCondition();
+        const name = await question('Condition Name: ');
+        const conditionText = await question('Condition Instructions: ');
+        await this.addCondition(name, conditionText);
       }
       const saveConditions = await question('Save current conditions to file? [Y/n]');
       if (["y", ""].includes(saveConditions.toLowerCase())) {
         this.saveConditions();
       }
     }
-    ln.blank();
   }
 
-  async addCondition() {
-    const name = await question('Condition Name: ');
-    const conditionText = await question('Condition Instructions: ');
+  async addCondition(name: string, conditionText: string) {
     this.conditions.push({ name, condition: conditionText});
     this.conditionIndex = this.conditions.length - 1;
     ln.green(`Condition: "${this.condition.name}" added and set`);
@@ -137,11 +158,11 @@ export class Session {
   }
 
   logCost(requestCost: number) {
-    this.sessionCost += requestCost;
+    this.chatCost += requestCost;
 
     let costString = "Estimates" + 
       `- Request: $${requestCost.toFixed(3)} ` + 
-      `- Session: $${this.sessionCost.toFixed(3)} ` + 
+      `- Session: $${this.chatCost.toFixed(3)} ` + 
       `- Messages: ${this.messages.length}\n`;
     const costLogPath = `${config.OUTPUT_PATH}/cost_log.txt`;
 
@@ -154,7 +175,7 @@ export class Session {
     }
 
     ln.yellow(`Estimated cost of request: $${requestCost.toFixed(3)}`);
-    ln.yellow(`Estimated cost of session: $${this.sessionCost.toFixed(3)}`);
+    ln.yellow(`Estimated cost of session: $${this.chatCost.toFixed(3)}`);
   }
 
   logTokens(tokenUsage: CreateCompletionResponseUsage) {
@@ -169,11 +190,12 @@ export class Session {
       ln.blank();
       return;
     }
+    // TODO: Add check to see recent chat needs to be compressed (summarize + archive)
     this.messages.addMessage("user", input);
     ln.yellow("Awaiting reply...");
     let response;
     try {
-      response = await this.client.requestChatCompletion(this.messages.current());
+      response = await this.client.requestChatCompletion(this.messages.recent());
     } catch (err) {
       ln.red("Error while requesting chat completion...");
       console.error(err);
@@ -188,30 +210,17 @@ export class Session {
       if (response.tokenUsage) this.logTokens(response.tokenUsage);
     }
     ln.blank();
-    this.messages.saveState();
+    this.saveToFile();
   }
 
-  async compress() {
+  async compressChat() {
     ln.yellow("Compressing via summary..."); 
-    const requestCost = await this.messages.compress(this.client);
-    this.logCost(requestCost);
-    // TODO:: log token usage/limits
+    const { cost } = await this.messages.compress(this.client);
+    this.logCost(cost);
   }
 
-  reload() {
-    ln.yellow("Reloading messages from state...");
-    this.messages.reload();
-    ln.green(`Messages: ${this.messages.length} loaded`);
-    ln.blank();
-    ln.green('Previously:'); 
-    ln.normal(`${this.messages.last.content}`);
-    ln.blank();
-  }
-
-  async save() {
-    let prefix = await question("Filename? ['chat']: ") || "chat";
-    const timestamp = new Date().getTime().toString();
-    const filename = `${prefix} - ${timestamp}`;
+  async printToFile() {
+    const filename = await question("Filename? ['chat']: ") || "chat";
     try {
       ln.yellow("Writing chat to file...");
       this.messages.saveChatToFile(filename);
@@ -223,16 +232,26 @@ export class Session {
     ln.blank();
   }
 
-  async backupSession() {
-    let prefix = await question("Filename? ['messages_state']") || "messages_state";
-    const timestamp = new Date().getTime().toString();
-    const filename = `${prefix} - ${timestamp}`;
+  json(): string {
+    return JSON.stringify({
+      messages: this.messages,
+      condition: this.condition
+    });
+  }
+
+  saveToFile(filepath: string | null = null) {
+    if (!filepath) filepath = `${config.OUTPUT_PATH}/chat_backup.json`;
+    writeFileSync(filepath, this.json(), "utf-8");
+  }
+
+  async saveChat() {
+    let filename = await question("Filename? ['chat_backup']") || "chat_backup";
     try {
-      ln.yellow("Backing up state to file...");
-      this.messages.backupMessagesState(filename);
-      ln.green("Session: Finished writing to file");
+      ln.yellow(`Saving chat to file...`);
+      this.saveToFile(`${config.CHATS_PATH}/${filename}.json`);
+      ln.green("Chat: Finished saving to file");
     } catch (err) {
-      ln.red("Session: Error while writing to file");
+      ln.red("Chat: Error while saving to file");
       console.error(err);
     }
     ln.blank();
@@ -241,18 +260,17 @@ export class Session {
   get actionMap(): { [key: string]: () => Promise<void> | void } {
     return {
       "": async () => await this.prompt(),
-      "b": async () => await this.backupSession(),
-      "c": () => process.exit(),
+      "o": async () => await this.printToFile(),
       "p": async () => await this.prompt(),
-      "r": () => this.reload(),
-      "s": async () => this.save(),
+      "s": async () => this.saveChat(),
+      "x": () => process.exit(),
     }
   }
 
   async selectAction() {
     ln.orange("Select an action:");
-    ln.yellow("[P] Prompt (default) - [B] Backup Session")
-    ln.yellow("[S] Save Chat - [R] Reload State - [C] Close");
+    ln.yellow("[P] Prompt (default) - [X] Close")
+    ln.yellow("[S] Save Chat - [O] Print Chat to File");
     const input = await question("");
     ln.blank();
     try {
