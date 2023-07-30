@@ -6,6 +6,7 @@ const render = (format: ChalkInstance) => {
 }
 
 export default {
+  blue: render(chalk.blue),
   green: render(chalk.green),
   yellow: render(chalk.yellow),
   orange: render(chalk.hex("#ff792b")),

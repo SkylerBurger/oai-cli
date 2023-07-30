@@ -10,7 +10,7 @@ const commandLineReader = readline.createInterface({
 
 export const question = (query: string): Promise<string> => {
   return new Promise((resolve) => {
-    ln.orange(query);
+    if (query !== "") ln.orange(query);
     commandLineReader.question("> ", ans => resolve(ans));
   });
 };

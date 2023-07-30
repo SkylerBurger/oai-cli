@@ -112,7 +112,7 @@ export class Messages {
       
       appendFileSync(
         filepath,
-        `${role}:\n${text}\n\n`,  
+        `${role.toUpperCase()}:\n${text}\n\n`,  
       )
     }
   }

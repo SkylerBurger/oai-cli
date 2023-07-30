@@ -35,7 +35,7 @@ export class Session {
     this.sessionCost = 0;
   }
 
-  async load() {
+  async configure() {
     ln.greenBanner("STARTING UP!");
     await this.loadConditions();
 
@@ -43,20 +43,21 @@ export class Session {
     if (["y", ""].includes(loadState.toLowerCase())) {
       try {
         this.messages.loadState();
-        ln.green(`  - Message State Input: ${this.messages.length - 1} Messages Loaded`);
+        ln.green(`Message State Input: ${this.messages.length - 1} Messages Loaded`);
         ln.blank();
         ln.green('Previously...'), 
         ln.normal(`${this.messages.last.content}`);
 
       } catch (err) {
-        ln.red("  - Message State Input: Not loaded - Failure");
+        ln.red("Message State Input: Not loaded - Failure");
         console.error(err);
       }
     } else {
-      ln.green("  - Message State Input:"), 
-      ln.yellow("    Not Provided");
+      ln.yellow("Skipping...");
     }
 
+    ln.blank();
+    ln.green("Session ready...");
     ln.blank();
   }
 
@@ -65,17 +66,17 @@ export class Session {
   }
 
   async loadConditions() {
-    const loadCondition = await question('Load systen precondition? [Y/n]');
+    const loadCondition = await question('Load saved condition? [Y/n]');
     if (["y", ""].includes(loadCondition.toLowerCase())) {
       try {
         const filename = `${config.INPUT_PATH}/conditions.json`;
         const fileContent = readFileSync(filename, "utf-8");
         this.conditions = JSON.parse(fileContent);
-        ln.green("  - Conditions: Loaded");
+        ln.green(`Conditions: ${this.conditions.length} loaded`);
         ln.blank()
         await this.selectCondition();
       } catch (err) {
-        ln.red("  - Conditions: Not loaded - Failure");
+        ln.red("Conditions: Failure while loading");
         console.error(err);
       }
     } else {
@@ -85,7 +86,7 @@ export class Session {
       }
       const saveConditions = await question('Save current conditions to file? [Y/n]');
       if (["y", ""].includes(saveConditions.toLowerCase())) {
-        await this.saveConditions();
+        this.saveConditions();
       }
     }
     ln.blank();
@@ -96,7 +97,7 @@ export class Session {
     const conditionText = await question('Condition Instructions: ');
     this.conditions.push({ name, condition: conditionText});
     this.conditionIndex = this.conditions.length - 1;
-    ln.green(`  - Condition: "${this.condition.name}" added and set`);
+    ln.green(`Condition: "${this.condition.name}" added and set`);
   }
 
   async selectCondition() {
@@ -113,9 +114,9 @@ export class Session {
     try {
       this.conditionIndex = parseInt(response);
       this.messages.loadCondition(this.condition.condition);
-      ln.green(`  - Condition: "${this.condition.name}" Loaded`);
+      ln.green(`Condition: "${this.condition.name}" Loaded`);
     } catch (err) {
-      ln.red("  - Condition: Failed to load");
+      ln.red("Condition: Failed to load");
       console.error(err);
     }
   }
@@ -128,9 +129,9 @@ export class Session {
         JSON.stringify(this.conditions),
         "utf-8",
       );
-      ln.green("  - Conditions: Saved to file");
+      ln.green("Conditions: Saved to file");
     } catch (err) {
-      ln.red("Error while saving conditions to file...");
+      ln.red("Conditions: Error while saving to file");
       console.error(err);
     }
   }
@@ -163,8 +164,11 @@ export class Session {
   }
 
   async prompt() {
-    const input = await question("Prompt");
-    if (!input) return;
+    const input = await question("Prompt:");
+    if (!input) {
+      ln.blank();
+      return;
+    }
     this.messages.addMessage("user", input);
     ln.yellow("Awaiting reply...");
     let response;
@@ -173,13 +177,16 @@ export class Session {
     } catch (err) {
       ln.red("Error while requesting chat completion...");
       console.error(err);
-      return
+      return;
     }
     this.messages.addMessage("assistant", response.message.content);
-    ln.greenBanner("\nRESPONSE:");
+    ln.blank();
+    ln.green("Response:");
     ln.normal(`${response.message.content}\n`);
-    this.logCost(response.cost);
-    if (response.tokenUsage) this.logTokens(response.tokenUsage);
+    if (config.LOG_USAGE) {
+      this.logCost(response.cost);
+      if (response.tokenUsage) this.logTokens(response.tokenUsage);
+    }
     ln.blank();
     this.messages.saveState();
   }
@@ -194,10 +201,11 @@ export class Session {
   reload() {
     ln.yellow("Reloading messages from state...");
     this.messages.reload();
-    ln.green(`${this.messages.length} messages loaded...`);
+    ln.green(`Messages: ${this.messages.length} loaded`);
     ln.blank();
-    ln.green('Previously...'); 
-    ln.normal(`${this.messages.last.content}\n`);
+    ln.green('Previously:'); 
+    ln.normal(`${this.messages.last.content}`);
+    ln.blank();
   }
 
   async save() {
@@ -207,24 +215,24 @@ export class Session {
     try {
       ln.yellow("Writing chat to file...");
       this.messages.saveChatToFile(filename);
-      ln.green("~ Finished ~");
+      ln.green("Chat: Finished writing to file");
     } catch (err) {
-      ln.red("Error while writing to file:");
+      ln.red("Chat: Error while writing to file");
       console.error(err);
     }
     ln.blank();
   }
 
-  async backupState() {
-    let prefix = await question("Filename? ['messages_state']: ") || "messages_state";
+  async backupSession() {
+    let prefix = await question("Filename? ['messages_state']") || "messages_state";
     const timestamp = new Date().getTime().toString();
     const filename = `${prefix} - ${timestamp}`;
     try {
       ln.yellow("Backing up state to file...");
       this.messages.backupMessagesState(filename);
-      ln.green("~ Finished ~");
+      ln.green("Session: Finished writing to file");
     } catch (err) {
-      ln.red("Error while writing to file:");
+      ln.red("Session: Error while writing to file");
       console.error(err);
     }
     ln.blank();
@@ -233,7 +241,7 @@ export class Session {
   get actionMap(): { [key: string]: () => Promise<void> | void } {
     return {
       "": async () => await this.prompt(),
-      "b": async () => await this.backupState(),
+      "b": async () => await this.backupSession(),
       "c": () => process.exit(),
       "p": async () => await this.prompt(),
       "r": () => this.reload(),
@@ -242,9 +250,9 @@ export class Session {
   }
 
   async selectAction() {
-    ln.blueBanner("Select an action:");
-    ln.blueBanner("[P] Prompt (default) - [B] Backup State")
-    ln.blueBanner("[S] Save Chat - [R] Reload State - [C] Close ");
+    ln.orange("Select an action:");
+    ln.yellow("[P] Prompt (default) - [B] Backup Session")
+    ln.yellow("[S] Save Chat - [R] Reload State - [C] Close");
     const input = await question("");
     ln.blank();
     try {
@@ -253,7 +261,14 @@ export class Session {
       ln.normal("Try again...");
       ln.blank();
     }
-    this.selectAction();
+  }
+
+  async begin() {
+    await this.prompt();
+
+    while (true) {
+      await this.selectAction();
+    }
   }
 
 }
