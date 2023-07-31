@@ -31,3 +31,13 @@ This is how I refer to certain pieces of information in this project for clarity
 4. Start the program, `npm start`.
 5. Follow the prompts on screen to configure and start a new conversation or reload a previous conversation.
 6. The state of the current chat session is backed up to file after each prompt. You can also choose to back up a chat session to file so it can be reloaded and continued later.
+
+## Configure Environment
+
+There are a few environment variables you can set in your `.env` or export directly into the environment to alter how the OAC-CLI operates.
+
+- `CHATS_PATH: str = './chats'` - This is where OAI-CLI will look when backing up a chat session or when requested to load a previous chat session.
+- `INPUT_PATH: str = './input'` - This is the location where OAI-CLI will look when loading or saving `conditions.json' for future chat sessions.
+- `LOG_USAGE: bool = False` - When set to `True`, the OAI-CLI will include a printout after each response to give you an idea of how many tokens you're using, the overall size of the conversation being sent to OpenAI, and the estimated costs of your API usage. API usage costs are also printed to a `cost_log.txt` file in your `OUTPUT_PATH`.
+- `OUTPUT_PATH: str = './output` - This is the location where OAI-CLI will save the backup of your current chat session and the cost log if enabled.
+
