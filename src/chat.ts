@@ -191,17 +191,17 @@ export class Chat {
       return;
     }
     // TODO: Add check to see recent chat needs to be compressed (summarize + archive)
-    this.messages.addMessage("user", input);
+    this.messages.addMessage({ role: "user", content: input});
     ln.yellow("Awaiting reply...");
     let response;
     try {
-      response = await this.client.requestChatCompletion(this.messages.recent());
+      response = await this.client.requestChatCompletion(this.messages.serializeForRequest());
     } catch (err) {
       ln.red("Error while requesting chat completion...");
       console.error(err);
       return;
     }
-    this.messages.addMessage("assistant", response.message.content);
+    this.messages.addMessage({ role: "assistant", content: response.message.content });
     ln.blank();
     ln.green("Response:");
     ln.normal(`${response.message.content}\n`);
@@ -219,11 +219,11 @@ export class Chat {
     this.logCost(cost);
   }
 
-  async printToFile() {
+  async transcribeChat() {
     const filename = await question("Filename? ['chat']: ") || "chat";
     try {
       ln.yellow("Writing chat to file...");
-      this.messages.saveChatToFile(filename);
+      this.messages.transcribeChat(filename);
       ln.green("Chat: Finished writing to file");
     } catch (err) {
       ln.red("Chat: Error while writing to file");
@@ -248,6 +248,7 @@ export class Chat {
     let filename = await question("Filename? ['chat_backup']") || "chat_backup";
     try {
       ln.yellow(`Saving chat to file...`);
+      if (!existsSync(config.CHATS_PATH)) mkdirSync(config.CHATS_PATH);
       this.saveToFile(`${config.CHATS_PATH}/${filename}.json`);
       ln.green("Chat: Finished saving to file");
     } catch (err) {
@@ -260,9 +261,9 @@ export class Chat {
   get actionMap(): { [key: string]: () => Promise<void> | void } {
     return {
       "": async () => await this.prompt(),
-      "o": async () => await this.printToFile(),
       "p": async () => await this.prompt(),
       "s": async () => this.saveChat(),
+      "t": async () => await this.transcribeChat(),
       "x": () => process.exit(),
     }
   }
@@ -270,7 +271,7 @@ export class Chat {
   async selectAction() {
     ln.orange("Select an action:");
     ln.yellow("[P] Prompt (default) - [X] Close")
-    ln.yellow("[S] Save Chat - [O] Print Chat to File");
+    ln.yellow("[S] Save Chat Session - [T] Transcribe Chat");
     const input = await question("");
     ln.blank();
     try {

@@ -16,83 +16,86 @@ import { OAIClient } from "./openai.js";
 
 export class Messages {
   archive: Message[];
-  list: Message[];
+  recent: Message[];
 
   constructor(messages = []) {
     this.archive = [];
-    this.list = messages;
+    this.recent = messages;
   }
 
-  addMessage(role: ChatCompletionRequestMessageRoleEnum, text: string, tokens: number | null = null) {
-    const newMessage = new Message(role,text);
+  addMessage({
+    role,
+    content,
+    tokens = null,
+    archive = false,
+  }: {
+    role: ChatCompletionRequestMessageRoleEnum,
+    content: string,
+    tokens?: number | null,
+    archive?: boolean,
+  }) {
+    const newMessage = new Message(role, content, tokens);
     if (tokens) newMessage.tokens = tokens;
-    this.push(newMessage);
-  }
-
-  recent(): ChatCompletionRequestMessage[] {
-    return this.list.map(message => {
-      return {role: message.role, content: message.content};
-    })
+    if (archive) {
+      this.archive.push(newMessage);
+    } else {
+      this.recent.push(newMessage);
+    }
   }
 
   get last() {
-    return this.list.slice(-1)[0];
+    return this.recent.slice(-1)[0];
   }
 
   get length() {
-    return this.list.length;
-  }
-
-  push(message: Message) {
-    this.list.push(message);
+    return this.recent.length;
   }
 
   concat(loadedMessages: Message[]) {
-    this.list = this.list.concat(loadedMessages);
+    this.recent = this.recent.concat(loadedMessages);
   }
 
   unshift(message: Message) {
-    this.list.unshift(message);
+    this.recent.unshift(message);
   }
 
   loadCondition(condition: string) {
-    this.push(new Message("system", condition));
+    this.recent.push(new Message("system", condition));
   }
 
   loadMessages(archive: Message[], recent: Message[]) {
     for(let i=0; i < archive.length; i++) {
-      this.addMessage(archive[i].role, archive[i].content, archive[i].tokens);
+      this.addMessage({
+        role: archive[i].role, 
+        content: archive[i].content, 
+        tokens: archive[i].tokens,
+        archive: true,
+      });
     }
     for(let i=0; i < recent.length; i++) {
-      this.addMessage(recent[i].role, recent[i].content, recent[i].tokens);
+      this.addMessage({
+        role: recent[i].role, 
+        content: recent[i].content, 
+        tokens: recent[i].tokens
+      });
     }
   }
 
-  backupMessagesState(filename:string) {
-    if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
-    if (!filename) filename = "messages_state"
-    writeFileSync(
-      `${config.OUTPUT_PATH}/${filename}.json`,
-      JSON.stringify(this.list, null, 4),
-      'utf-8',
-    );
-  }
-
-  saveChatToFile(filename: string) {
+  transcribeChat(filename: string) {
     if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
     const filepath = `${config.OUTPUT_PATH}/${filename}.txt`;
 
     writeFileSync(filepath, '', 'utf-8',);
 
-    for (let i = 0; i < this.list.length; i++) {
+    for (let i = 0; i < this.recent.length; i++) {
       const roleMap = {
         user: "Prompt",
         system: "System",
         assistant: "Response",
         function: "Function",
       }
-      let role = roleMap[this.list[i].role];
-      const text = this.list[i].content;
+      let role = roleMap[this.recent[i].role];
+      const text = this.recent[i].content;
       
       appendFileSync(
         filepath,
@@ -102,10 +105,19 @@ export class Messages {
   }
 
   async compress(client: OAIClient) { 
-    const response = await client.requestChatSummary(this.list);
+    const response = await client.requestChatSummary(this.recent);
     const summaryMessage = new Message("system", `Chat History: ${response.message.content}`);
-    this.archive = this.archive.concat(this.list.slice(1));
-    this.list = [this.list[0], summaryMessage];
+    this.archive = this.archive.concat(this.recent.slice(1));
+    this.recent = [this.recent[0], summaryMessage];
     return response;
+  }
+
+  serializeForRequest() {
+    return this.recent.map((message) => {
+      return {
+        role: message.role,
+        content: message.content,
+      }
+    });
   }
 }

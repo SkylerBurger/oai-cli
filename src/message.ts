@@ -12,10 +12,10 @@ export class Message {
   content: string;
   tokens: number;
 
-  constructor(role: ChatCompletionRequestMessageRoleEnum, content: string) {
+  constructor(role: ChatCompletionRequestMessageRoleEnum, content: string, tokens: number | null = null) {
     this.role = role;
     this.content = content;
-    this.tokens = this.encode();
+    this.tokens = tokens || this.encode();
   }
 
   setTokens(tokenUsage: CreateCompletionResponseUsage) {
