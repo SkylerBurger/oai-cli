@@ -15,7 +15,7 @@ export class Message {
   constructor(role: ChatCompletionRequestMessageRoleEnum, content: string, tokens: number | null = null) {
     this.role = role;
     this.content = content;
-    this.tokens = tokens || this.encode();
+    this.tokens = tokens || this.encode(content);
   }
 
   setTokens(tokenUsage: CreateCompletionResponseUsage) {
@@ -31,7 +31,12 @@ export class Message {
     // TODO: determine system messages from first request in a sequence.
   }
 
-  encode():number {
-    return encode(this.content).length;
+  encode(content: string | null): number {
+    if (!content) content = this.content;
+    if (!content) {
+      console.log("nothing there.");
+      throw Error(`No content found: ${content}`);
+    }
+    return encode(content).length;
   }
 }

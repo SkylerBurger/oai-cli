@@ -9,28 +9,12 @@ import {
 import ln from "./formatting.js";
 import config from "./config.js";
 import { question } from "./input.js";
-import { Message } from "./message.js";
+import { ChatState, Condition } from "./interfaces.js";
 import { Messages } from "./messages.js";
-import { gpt3 } from "./models.js";
+import { gpt4 } from "./models.js";
 import { OAIClient } from "./openai.js";
 import { CreateCompletionResponseUsage } from "openai";
 
-
-interface Condition {
-  name: string;
-  condition: string;
-}
-
-interface ChatState {
-  messages: {
-    archive: Message[];
-    list: Message[];
-  };
-  condition: {
-    name: string;
-    condition: string;
-  };
-}
 
 export class Chat {
   client: OAIClient;
@@ -40,11 +24,19 @@ export class Chat {
   chatCost: number;
 
   constructor() {
-    this.client = new OAIClient(gpt3);
+    this.client = new OAIClient(gpt4);
     this.conditionIndex = 0;
     this.conditions = [];
     this.messages = new Messages();
     this.chatCost = 0;
+  }
+
+  async begin() {
+    await this.prompt();
+
+    while (true) {
+      await this.prompt();
+    }
   }
 
   async configure() {
@@ -72,19 +64,84 @@ export class Chat {
     ln.blank();
   }
 
-  async loadChat() { 
-    const filename = await question(`Name of JSON file in chats directory (${config.CHATS_PATH})`);
-    const chatString = readFileSync(
-      `${config.CHATS_PATH}/${filename}.json`,
-      "utf-8",
-    )
-    const chatState: ChatState = JSON.parse(chatString);
-    this.messages.loadMessages(chatState.messages.archive, chatState.messages.list);
-    this.addCondition(chatState.condition.name, chatState.condition.condition);
+  // ACTION LOOP
+  get actionMap(): { [key: string]: () => Promise<void> | void } {
+    return {
+      "": async () => await this.prompt(),
+      "p": async () => await this.prompt(),
+      "s": async () => await this.saveChat(),
+      "t": async () => await this.transcribeChat(),
+      "x": async () => await this.exit(),
+    }
   }
 
-  get condition() {
-    return this.conditions[this.conditionIndex];
+  async selectAction() {
+    ln.orange("Select an action:");
+    ln.yellow("[P] Prompt (default) - [X] Close")
+    ln.yellow("[S] Save Chat Session - [T] Transcribe Chat");
+    const input = await question("");
+    ln.blank();
+    try {
+      await this.actionMap[input]();
+    } catch (err) {
+      ln.normal("Try again...");
+      ln.blank();
+    }
+  }
+
+  async prompt() {
+    const input = await question("Prompt:  ['Enter' for options]");
+    if (!input) {
+      ln.blank();
+      await this.selectAction();
+      return;
+    }
+
+    if (this.messages.totalTokens >= (this.client.model.maxTokens - 600)) {
+      await this.compressChat();
+    }
+
+    this.messages.addMessage({ role: "user", content: input});
+    ln.yellow("Awaiting reply...");
+    let response;
+    try {
+      response = await this.client.requestChatCompletion(this.messages.serializeForRequest());
+    } catch (err) {
+      ln.red("Error while requesting chat completion...");
+      console.error(err);
+      return;
+    }
+    this.messages.addMessage({ role: "assistant", content: response.message.content });
+    ln.blank();
+    ln.green("Response:");
+    ln.normal(`${response.message.content}\n`);
+    if (config.LOG_USAGE) {
+      this.logCost(response.cost);
+      if (response.tokenUsage) this.logTokens(response.tokenUsage);
+    }
+    ln.blank();
+    this.writeSaveToFile();
+  }
+
+  async exit() {
+    while(true) {
+      let saveReply = await question('Save chat session before quitting? [y/n]');
+      saveReply = saveReply.toLocaleLowerCase();
+      if (saveReply === "y") {
+        await this.saveChat();
+        break;
+      }
+      if (saveReply === "n") {
+        break;
+      }
+    }
+    ln.green('Goodbye!');
+    process.exit();
+  }
+
+  // Conditions
+  get condition(): Condition | null {
+    return this.conditions ? this.conditions[this.conditionIndex] : null;
   }
 
   async loadConditions() {
@@ -115,16 +172,11 @@ export class Chat {
     }
   }
 
-  async addCondition(name: string, conditionText: string) {
-    this.conditions.push({ name, condition: conditionText});
-    this.conditionIndex = this.conditions.length - 1;
-    ln.green(`Condition: "${this.condition.name}" added and set`);
-  }
-
   async selectCondition() {
+    
     for(let i = 0; i < this.conditions.length; i++) {
       ln.blueBanner(`[${i}] ${this.conditions[i].name}`);
-      ln.normal(this.conditions[i].condition);
+      ln.normal(this.conditions[i].instructions);
       ln.blank();
     }
     const response = await question("Enter number or [c]ancel");
@@ -134,12 +186,23 @@ export class Chat {
     }
     try {
       this.conditionIndex = parseInt(response);
-      this.messages.loadCondition(this.condition.condition);
+      // TODO: Look into handling empty file
+      if (!this.condition) return;
+      const instructions = this.condition.instructions;
+      console.log(instructions);
+      this.messages.addCondition(instructions);
       ln.green(`Condition: "${this.condition.name}" Loaded`);
     } catch (err) {
       ln.red("Condition: Failed to load");
       console.error(err);
     }
+  }
+
+  async addCondition(name: string, conditionText: string) {
+    this.conditions.push({ name, instructions: conditionText});
+    const decrement = this.conditions.length -1
+    this.conditionIndex = decrement >= 0 ? decrement : 0;
+    ln.green(`Condition: "${(this.condition as Condition).name}" added and set`);
   }
 
   saveConditions() {
@@ -157,6 +220,7 @@ export class Chat {
     }
   }
 
+  // USAGE
   logCost(requestCost: number) {
     this.chatCost += requestCost;
 
@@ -184,39 +248,10 @@ export class Chat {
     ln.yellow(`Total Tokens: ${tokenUsage['total_tokens']}`);
   }
 
-  async prompt() {
-    const input = await question("Prompt:");
-    if (!input) {
-      ln.blank();
-      return;
-    }
-    // TODO: Add check to see recent chat needs to be compressed (summarize + archive)
-    this.messages.addMessage({ role: "user", content: input});
-    ln.yellow("Awaiting reply...");
-    let response;
-    try {
-      response = await this.client.requestChatCompletion(this.messages.serializeForRequest());
-    } catch (err) {
-      ln.red("Error while requesting chat completion...");
-      console.error(err);
-      return;
-    }
-    this.messages.addMessage({ role: "assistant", content: response.message.content });
-    ln.blank();
-    ln.green("Response:");
-    ln.normal(`${response.message.content}\n`);
-    if (config.LOG_USAGE) {
-      this.logCost(response.cost);
-      if (response.tokenUsage) this.logTokens(response.tokenUsage);
-    }
-    ln.blank();
-    this.saveToFile();
-  }
-
   async compressChat() {
     ln.yellow("Compressing via summary..."); 
-    const { cost } = await this.messages.compress(this.client);
-    this.logCost(cost);
+    const { cost } = await this.messages.compress(this.client, this.condition);
+    if (config.LOG_USAGE) this.logCost(cost);
   }
 
   async transcribeChat() {
@@ -232,16 +267,16 @@ export class Chat {
     ln.blank();
   }
 
-  json(): string {
-    return JSON.stringify({
-      messages: this.messages,
-      condition: this.condition
-    });
-  }
-
-  saveToFile(filepath: string | null = null) {
-    if (!filepath) filepath = `${config.OUTPUT_PATH}/chat_backup.json`;
-    writeFileSync(filepath, this.json(), "utf-8");
+  // CHAT SESSION STATE
+  async loadChat() { 
+    const filename = await question(`Name of JSON file in chats directory (${config.CHATS_PATH})`);
+    const chatString = readFileSync(
+      `${config.CHATS_PATH}/${filename}.json`,
+      "utf-8",
+    )
+    const chatState: ChatState = JSON.parse(chatString);
+    this.messages.loadMessages(chatState.messages.archive, chatState.messages.recent);
+    this.addCondition(chatState.condition.name, chatState.condition.condition);
   }
 
   async saveChat() {
@@ -249,7 +284,7 @@ export class Chat {
     try {
       ln.yellow(`Saving chat to file...`);
       if (!existsSync(config.CHATS_PATH)) mkdirSync(config.CHATS_PATH);
-      this.saveToFile(`${config.CHATS_PATH}/${filename}.json`);
+      this.writeSaveToFile(`${config.CHATS_PATH}/${filename}.json`);
       ln.green("Chat: Finished saving to file");
     } catch (err) {
       ln.red("Chat: Error while saving to file");
@@ -258,36 +293,15 @@ export class Chat {
     ln.blank();
   }
 
-  get actionMap(): { [key: string]: () => Promise<void> | void } {
-    return {
-      "": async () => await this.prompt(),
-      "p": async () => await this.prompt(),
-      "s": async () => this.saveChat(),
-      "t": async () => await this.transcribeChat(),
-      "x": () => process.exit(),
-    }
+  writeSaveToFile(filepath: string | null = null) {
+    if (!filepath) filepath = `${config.OUTPUT_PATH}/chat_backup.json`;
+    writeFileSync(filepath, this.json(), "utf-8");
   }
 
-  async selectAction() {
-    ln.orange("Select an action:");
-    ln.yellow("[P] Prompt (default) - [X] Close")
-    ln.yellow("[S] Save Chat Session - [T] Transcribe Chat");
-    const input = await question("");
-    ln.blank();
-    try {
-      await this.actionMap[input]();
-    } catch (err) {
-      ln.normal("Try again...");
-      ln.blank();
-    }
+  json(): string {
+    return JSON.stringify({
+      messages: this.messages,
+      condition: this.condition
+    });
   }
-
-  async begin() {
-    await this.prompt();
-
-    while (true) {
-      await this.selectAction();
-    }
-  }
-
 }

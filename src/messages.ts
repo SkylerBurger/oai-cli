@@ -5,11 +5,11 @@ import {
   writeFileSync, 
 } from "fs";
 import { 
-  ChatCompletionRequestMessage,
   ChatCompletionRequestMessageRoleEnum, 
 } from "openai";
 
 import config from "./config.js";
+import { Condition } from "./interfaces.js";
 import { Message } from "./message.js";
 import { OAIClient } from "./openai.js";
 
@@ -43,12 +43,18 @@ export class Messages {
     }
   }
 
-  get last() {
+  get last(): Message {
     return this.recent.slice(-1)[0];
   }
 
-  get length() {
+  get length(): number {
     return this.recent.length;
+  }
+
+  get totalTokens(): number {
+    return this.recent.reduce((acc, message) => {
+      return acc + message.tokens;
+    }, 0);
   }
 
   concat(loadedMessages: Message[]) {
@@ -59,8 +65,8 @@ export class Messages {
     this.recent.unshift(message);
   }
 
-  loadCondition(condition: string) {
-    this.recent.push(new Message("system", condition));
+  addCondition(condition: string) {
+    this.recent.unshift(new Message("system", condition));
   }
 
   loadMessages(archive: Message[], recent: Message[]) {
@@ -104,11 +110,13 @@ export class Messages {
     }
   }
 
-  async compress(client: OAIClient) { 
-    const response = await client.requestChatSummary(this.recent);
+  async compress(client: OAIClient, condition: Condition | null) { 
+    const messagesForSummary = condition ? this.recent.slice(1) : this.recent;
+    const response = await client.requestChatSummary(messagesForSummary);
     const summaryMessage = new Message("system", `Chat History: ${response.message.content}`);
-    this.archive = this.archive.concat(this.recent.slice(1));
-    this.recent = [this.recent[0], summaryMessage];
+    this.archive = this.archive.concat(messagesForSummary);
+    this.recent = [summaryMessage];
+    if (condition) this.addCondition(condition.instructions);
     return response;
   }
 

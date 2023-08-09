@@ -1,10 +1,5 @@
-interface ContextSize {
-  name: string;
-  maxTokens: number;
-  inputCost: number;
-  outputCost: number
-  tokenDenominator: number;
-}
+import { ContextSize } from "./interfaces.js";
+
 
 export class GPTModel {
   contextSizes: ContextSize[];

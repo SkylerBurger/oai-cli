@@ -5,3 +5,6 @@
 /input
 /node_modules
 /output
+
+.idea
+.vscode
