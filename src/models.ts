@@ -52,7 +52,7 @@ export const gpt3 = new GPTModel(
 
 export const gpt4 = new GPTModel(
   [
-    { name: "gpt-4", maxTokens: 8192, inputCost: .003, outputCost: .006, tokenDenominator: 1000},
+    { name: "gpt-4", maxTokens: 8192, inputCost: .03, outputCost: .06, tokenDenominator: 1000},
     { name: "gpt-4-32k", maxTokens: 32768, inputCost: .006, outputCost: .012, tokenDenominator: 1000},
   ]
 )

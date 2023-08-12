@@ -250,7 +250,11 @@ export class Chat {
 
   async compressChat() {
     ln.yellow("Compressing via summary..."); 
-    const { cost } = await this.messages.compress(this.client, this.condition);
+    const { message, cost } = await this.messages.compress(this.client, this.condition);
+    ln.blank();
+    ln.green("The story so far...");
+    ln.normal(message.content);
+    ln.blank();
     if (config.LOG_USAGE) this.logCost(cost);
   }
 
@@ -276,7 +280,7 @@ export class Chat {
     )
     const chatState: ChatState = JSON.parse(chatString);
     this.messages.loadMessages(chatState.messages.archive, chatState.messages.recent);
-    this.addCondition(chatState.condition.name, chatState.condition.condition);
+    this.addCondition(chatState.condition.name, chatState.condition.instructions);
   }
 
   async saveChat() {

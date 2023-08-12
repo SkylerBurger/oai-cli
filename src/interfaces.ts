@@ -8,7 +8,7 @@ export interface ChatState {
   };
   condition: {
     name: string;
-    condition: string;
+    instructions: string;
   };
 }
 

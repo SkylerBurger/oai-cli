@@ -111,17 +111,19 @@ export class Messages {
   }
 
   async compress(client: OAIClient, condition: Condition | null) { 
-    const messagesForSummary = condition ? this.recent.slice(1) : this.recent;
+
+    const messagesForSummary = condition ? this.serializeForRequest().slice(1) : this.serializeForRequest();
     const response = await client.requestChatSummary(messagesForSummary);
     const summaryMessage = new Message("system", `Chat History: ${response.message.content}`);
-    this.archive = this.archive.concat(messagesForSummary);
+    let archiveStart = condition ? 1 : 0;
+    this.archive = this.archive.concat(this.recent.slice(archiveStart))
     this.recent = [summaryMessage];
     if (condition) this.addCondition(condition.instructions);
     return response;
   }
 
-  serializeForRequest() {
-    return this.recent.map((message) => {
+  serializeForRequest(start: number = 0) {
+    return this.recent.slice(start).map((message) => {
       return {
         role: message.role,
         content: message.content,

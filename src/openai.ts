@@ -86,8 +86,7 @@ export class OAIClient {
   async requestChatSummary(messages: ChatCompletionRequestMessage[]) {
     const summaryRequestPrompt =
       "Please summarize the chat so far into a single paragraph that GPT would understand as a system message.";
-    let summaryRequestMessages: ChatCompletionRequestMessage[] = messages.slice(1);
-    summaryRequestMessages.push({ role: "user", content: summaryRequestPrompt});
-    return await this.requestChatCompletion(summaryRequestMessages);
+    messages.push({ role: "user", content: summaryRequestPrompt});
+    return await this.requestChatCompletion(messages);
   }
 }
