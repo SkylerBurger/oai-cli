@@ -13,7 +13,7 @@ import { ChatState, Condition } from "./interfaces.js";
 import { Messages } from "./messages.js";
 import { gpt4 } from "./models.js";
 import { OAIClient } from "./openai.js";
-import { CreateCompletionResponseUsage } from "openai";
+import { ChatCompletionRequestMessageRoleEnum, CreateCompletionResponseUsage } from "openai";
 
 
 export class Chat {
@@ -97,7 +97,10 @@ export class Chat {
       return;
     }
 
-    if (this.messages.totalTokens >= (this.client.model.maxTokens - 600)) {
+    if (
+      !config.INPUT_MAX_TOKENS && 
+      (this.messages.totalTokens >= (this.client.model.maxTokens - 600))
+    ) {
       await this.compressChat();
     }
 

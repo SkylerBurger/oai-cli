@@ -5,6 +5,7 @@ import {
   writeFileSync, 
 } from "fs";
 import { 
+  ChatCompletionRequestMessage,
   ChatCompletionRequestMessageRoleEnum, 
 } from "openai";
 
@@ -123,6 +124,20 @@ export class Messages {
   }
 
   serializeForRequest(start: number = 0) {
+    if (config.INPUT_MAX_TOKENS) {
+      let serializedMessages: ChatCompletionRequestMessage[] = [];
+      let tokenCount = 0;
+      for (let i = this.recent.length - 1; i >= 0; i--) {
+        let thisMessage = this.recent[i];
+        tokenCount += thisMessage.tokens;
+        serializedMessages.unshift(thisMessage.serializeForRequest());
+        if (tokenCount > config.INPUT_MAX_TOKENS) break;
+      }
+      console.log(`Messages in request: ${serializedMessages.length}/${this.recent.length}`)
+      return serializedMessages;
+    }
+
+
     return this.recent.slice(start).map((message) => {
       return {
         role: message.role,

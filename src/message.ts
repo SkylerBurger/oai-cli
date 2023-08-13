@@ -1,5 +1,6 @@
 import { encode } from "gpt-3-encoder";
 import { 
+  ChatCompletionRequestMessage,
   ChatCompletionRequestMessageRoleEnum, 
   CreateCompletionResponseUsage, 
 } from "openai"
@@ -38,5 +39,11 @@ export class Message {
       throw Error(`No content found: ${content}`);
     }
     return encode(content).length;
+  }
+
+  serializeForRequest(): ChatCompletionRequestMessage {
+    let role = this.role;
+    let content = this.content;
+    return { role, content };
   }
 }
