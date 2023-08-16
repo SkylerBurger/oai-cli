@@ -8,6 +8,7 @@ import {
 import config from "./config.js";
 import { Message } from "./message.js";
 import { GPTModel } from "./models.js";
+import { ChatResponse } from "./interfaces.js";
 
 
 interface RateLimits {
@@ -64,16 +65,10 @@ export class OAIClient {
     }
   }
 
-  async requestChatCompletion(messages: ChatCompletionRequestMessage[]) {
-    // TODO: Check if request fits current contextSize, upscale
-    // If ((total_tokens + max_tokens) >= model_max_tokens) switch model;
-    // Maybe a separate function because it will need to check next contextSize to see if it fits
-    // Otherwise the current chat needs to be compressed and archived.
-
+  async requestChatCompletion(messages: ChatCompletionRequestMessage[]): Promise<ChatResponse> {
     const response = await this.api.createChatCompletion({
       model: this.model.name,
       messages: messages,
-      // max_tokens: 400,
     });
     this.tokenUsage = response.data.usage || null;
     this.processRateLimits(response.request.res.headers || null);
@@ -85,7 +80,7 @@ export class OAIClient {
 
   async requestChatSummary(messages: ChatCompletionRequestMessage[]) {
     const summaryRequestPrompt =
-      "Please summarize the chat so far into a single paragraph that GPT would understand as a system message.";
+    "Please write a condensed summary the chat so far that GPT would understand as a system message. After the summary paragraph include a list of each character in the story so far. Include their name and a short description of them.";
     messages.push({ role: "user", content: summaryRequestPrompt});
     return await this.requestChatCompletion(messages);
   }

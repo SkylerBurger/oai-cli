@@ -1,20 +1,22 @@
+import { CreateCompletionResponseUsage } from "openai";
+
 import { Message } from "./message.js";
 
 
+export interface ChatResponse {
+  message: Message, 
+  cost: number, 
+  tokenUsage: CreateCompletionResponseUsage | null
+}
+
 export interface ChatState {
   messages: {
-    archive: Message[];
-    recent: Message[];
+    history: Message[];
   };
   condition: {
     name: string;
     instructions: string;
   };
-}
-
-export interface Condition {
-  name: string;
-  instructions: string;
 }
 
 export interface ContextSize {

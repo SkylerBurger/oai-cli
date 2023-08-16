@@ -7,28 +7,27 @@ import {
 } from "fs";
 
 import ln from "./formatting.js";
+import {Condition, ConditionManager } from "./condition.js";
 import config from "./config.js";
 import { question } from "./input.js";
-import { ChatState, Condition } from "./interfaces.js";
+import { ChatState, ChatResponse } from "./interfaces.js";
+import { Message } from "./message.js";
 import { Messages } from "./messages.js";
 import { gpt4 } from "./models.js";
 import { OAIClient } from "./openai.js";
-import { ChatCompletionRequestMessageRoleEnum, CreateCompletionResponseUsage } from "openai";
+import { CreateCompletionResponseUsage } from "openai";
 
 
 export class Chat {
   client: OAIClient;
-  conditionIndex: number;
-  conditions: Condition[];
+  condition: Condition | null = null;
+  summary: Message | null = null;
   messages: Messages;
-  chatCost: number;
+  chatCost: number = 0;
 
   constructor() {
     this.client = new OAIClient(gpt4);
-    this.conditionIndex = 0;
-    this.conditions = [];
     this.messages = new Messages();
-    this.chatCost = 0;
   }
 
   async begin() {
@@ -45,7 +44,7 @@ export class Chat {
     if (loadChatReply.toLowerCase() === "y") {
       try {
         await this.loadChat();
-        ln.green(`Chat: ${this.messages.length - 1} Messages Loaded`);
+        ln.green(`Chat: ${ this.messages.length } Messages Loaded`);
         ln.blank();
         ln.green('Previously...'), 
         ln.normal(`${this.messages.last.content}`);
@@ -56,7 +55,13 @@ export class Chat {
     } else {
       ln.yellow("Skipping...")
       ln.blank();
-      await this.loadConditions();
+      const conditionManager = new ConditionManager();
+      this.condition = await conditionManager.configureConditions();
+      if (this.condition) {
+        ln.green(`Condition Set: ${ this.condition.name }`);
+      } else {
+        ln.yellow("Skipping...");
+      }
     }
 
     ln.blank();
@@ -97,18 +102,11 @@ export class Chat {
       return;
     }
 
-    if (
-      !config.INPUT_MAX_TOKENS && 
-      (this.messages.totalTokens >= (this.client.model.maxTokens - 600))
-    ) {
-      await this.compressChat();
-    }
-
     this.messages.addMessage({ role: "user", content: input});
     ln.yellow("Awaiting reply...");
-    let response;
+    let response: ChatResponse;
     try {
-      response = await this.client.requestChatCompletion(this.messages.serializeForRequest());
+      response = await this.client.requestChatCompletion(this.messages.serializeForRequest(this.condition));
     } catch (err) {
       ln.red("Error while requesting chat completion...");
       console.error(err);
@@ -142,87 +140,6 @@ export class Chat {
     process.exit();
   }
 
-  // Conditions
-  get condition(): Condition | null {
-    return this.conditions ? this.conditions[this.conditionIndex] : null;
-  }
-
-  async loadConditions() {
-    const loadCondition = await question('Load saved condition? [Y/n]');
-    if (["y", ""].includes(loadCondition.toLowerCase())) {
-      try {
-        const filename = `${config.INPUT_PATH}/conditions.json`;
-        const fileContent = readFileSync(filename, "utf-8");
-        this.conditions = JSON.parse(fileContent);
-        ln.green(`Conditions: ${this.conditions.length} loaded`);
-        ln.blank()
-        await this.selectCondition();
-      } catch (err) {
-        ln.red("Conditions: Failure while loading");
-        console.error(err);
-      }
-    } else {
-      const addConditionAnswer = await question('Add a condition? [Y/n]');
-      if (["y", ""].includes(addConditionAnswer.toLowerCase())) {
-        const name = await question('Condition Name: ');
-        const conditionText = await question('Condition Instructions: ');
-        await this.addCondition(name, conditionText);
-      }
-      const saveConditions = await question('Save current conditions to file? [Y/n]');
-      if (["y", ""].includes(saveConditions.toLowerCase())) {
-        this.saveConditions();
-      }
-    }
-  }
-
-  async selectCondition() {
-    
-    for(let i = 0; i < this.conditions.length; i++) {
-      ln.blueBanner(`[${i}] ${this.conditions[i].name}`);
-      ln.normal(this.conditions[i].instructions);
-      ln.blank();
-    }
-    const response = await question("Enter number or [c]ancel");
-    if (["c", ""].includes(response.toLowerCase())) {
-      ln.yellow("Skipping...");
-      return;
-    }
-    try {
-      this.conditionIndex = parseInt(response);
-      // TODO: Look into handling empty file
-      if (!this.condition) return;
-      const instructions = this.condition.instructions;
-      console.log(instructions);
-      this.messages.addCondition(instructions);
-      ln.green(`Condition: "${this.condition.name}" Loaded`);
-    } catch (err) {
-      ln.red("Condition: Failed to load");
-      console.error(err);
-    }
-  }
-
-  async addCondition(name: string, conditionText: string) {
-    this.conditions.push({ name, instructions: conditionText});
-    const decrement = this.conditions.length -1
-    this.conditionIndex = decrement >= 0 ? decrement : 0;
-    ln.green(`Condition: "${(this.condition as Condition).name}" added and set`);
-  }
-
-  saveConditions() {
-    if (!existsSync(config.INPUT_PATH)) mkdirSync(config.INPUT_PATH);
-    try {
-      writeFileSync(
-        `${config.INPUT_PATH}/conditions.json`,
-        JSON.stringify(this.conditions),
-        "utf-8",
-      );
-      ln.green("Conditions: Saved to file");
-    } catch (err) {
-      ln.red("Conditions: Error while saving to file");
-      console.error(err);
-    }
-  }
-
   // USAGE
   logCost(requestCost: number) {
     this.chatCost += requestCost;
@@ -251,16 +168,6 @@ export class Chat {
     ln.yellow(`Total Tokens: ${tokenUsage['total_tokens']}`);
   }
 
-  async compressChat() {
-    ln.yellow("Compressing via summary..."); 
-    const { message, cost } = await this.messages.compress(this.client, this.condition);
-    ln.blank();
-    ln.green("The story so far...");
-    ln.normal(message.content);
-    ln.blank();
-    if (config.LOG_USAGE) this.logCost(cost);
-  }
-
   async transcribeChat() {
     const filename = await question("Filename? ['chat']: ") || "chat";
     try {
@@ -282,8 +189,10 @@ export class Chat {
       "utf-8",
     )
     const chatState: ChatState = JSON.parse(chatString);
-    this.messages.loadMessages(chatState.messages.archive, chatState.messages.recent);
-    this.addCondition(chatState.condition.name, chatState.condition.instructions);
+    this.messages.loadMessages(chatState.messages.history);
+    if (chatState.condition) {
+      this.condition = new Condition(chatState.condition.name, chatState.condition.instructions);
+    }
   }
 
   async saveChat() {
@@ -308,7 +217,9 @@ export class Chat {
   json(): string {
     return JSON.stringify({
       messages: this.messages,
-      condition: this.condition
+      condition: this.condition ?
+        { name: this.condition.name, instructions: this.condition.instructions }
+        : null,
     });
   }
 }

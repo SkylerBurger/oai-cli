@@ -10,80 +10,55 @@ import {
 } from "openai";
 
 import config from "./config.js";
-import { Condition } from "./interfaces.js";
+import { Condition } from "./condition.js";
 import { Message } from "./message.js";
-import { OAIClient } from "./openai.js";
 
 
 export class Messages {
-  archive: Message[];
-  recent: Message[];
+  history: Message[];
 
   constructor(messages = []) {
-    this.archive = [];
-    this.recent = messages;
+    this.history = messages;
   }
 
   addMessage({
     role,
     content,
     tokens = null,
-    archive = false,
   }: {
     role: ChatCompletionRequestMessageRoleEnum,
     content: string,
     tokens?: number | null,
-    archive?: boolean,
   }) {
     const newMessage = new Message(role, content, tokens);
     if (tokens) newMessage.tokens = tokens;
-    if (archive) {
-      this.archive.push(newMessage);
-    } else {
-      this.recent.push(newMessage);
-    }
+    this.history.push(newMessage);
   }
 
   get last(): Message {
-    return this.recent.slice(-1)[0];
+    return this.history[this.history.length -1];
   }
 
   get length(): number {
-    return this.recent.length;
+    return this.history.length;
   }
 
   get totalTokens(): number {
-    return this.recent.reduce((acc, message) => {
+    return this.history.reduce((acc, message) => {
       return acc + message.tokens;
     }, 0);
   }
 
   concat(loadedMessages: Message[]) {
-    this.recent = this.recent.concat(loadedMessages);
+    this.history = this.history.concat(loadedMessages);
   }
 
-  unshift(message: Message) {
-    this.recent.unshift(message);
-  }
-
-  addCondition(condition: string) {
-    this.recent.unshift(new Message("system", condition));
-  }
-
-  loadMessages(archive: Message[], recent: Message[]) {
-    for(let i=0; i < archive.length; i++) {
+  loadMessages(history: Message[]) {
+    for(let i=0; i < history.length; i++) {
       this.addMessage({
-        role: archive[i].role, 
-        content: archive[i].content, 
-        tokens: archive[i].tokens,
-        archive: true,
-      });
-    }
-    for(let i=0; i < recent.length; i++) {
-      this.addMessage({
-        role: recent[i].role, 
-        content: recent[i].content, 
-        tokens: recent[i].tokens
+        role: history[i].role, 
+        content: history[i].content, 
+        tokens: history[i].tokens
       });
     }
   }
@@ -94,15 +69,19 @@ export class Messages {
 
     writeFileSync(filepath, '', 'utf-8',);
 
-    for (let i = 0; i < this.recent.length; i++) {
-      const roleMap = {
-        user: "Prompt",
-        system: "System",
-        assistant: "Response",
-        function: "Function",
-      }
-      let role = roleMap[this.recent[i].role];
-      const text = this.recent[i].content;
+    const roleMap = {
+      user: "Prompt",
+      system: "System",
+      assistant: "Response",
+      function: "Function",
+    }
+
+    for (let i = 0; i < this.history.length; i++) {
+      let role = roleMap[this.history[i].role];
+      
+      if (role !== roleMap.assistant) continue;
+    
+      const text = this.history[i].content;
       
       appendFileSync(
         filepath,
@@ -111,38 +90,26 @@ export class Messages {
     }
   }
 
-  async compress(client: OAIClient, condition: Condition | null) { 
+  serializeForRequest(condition: Condition | null) {
+    let tokenCount = 0;
+    let serializedMessages: ChatCompletionRequestMessage[] = [];
+    
+    if (condition) tokenCount += condition.tokens;
 
-    const messagesForSummary = condition ? this.serializeForRequest().slice(1) : this.serializeForRequest();
-    const response = await client.requestChatSummary(messagesForSummary);
-    const summaryMessage = new Message("system", `Chat History: ${response.message.content}`);
-    let archiveStart = condition ? 1 : 0;
-    this.archive = this.archive.concat(this.recent.slice(archiveStart))
-    this.recent = [summaryMessage];
-    if (condition) this.addCondition(condition.instructions);
-    return response;
-  }
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      let thisMessage = this.history[i];
 
-  serializeForRequest(start: number = 0) {
-    if (config.INPUT_MAX_TOKENS) {
-      let serializedMessages: ChatCompletionRequestMessage[] = [];
-      let tokenCount = 0;
-      for (let i = this.recent.length - 1; i >= 0; i--) {
-        let thisMessage = this.recent[i];
-        tokenCount += thisMessage.tokens;
-        serializedMessages.unshift(thisMessage.serializeForRequest());
-        if (tokenCount > config.INPUT_MAX_TOKENS) break;
-      }
-      console.log(`Messages in request: ${serializedMessages.length}/${this.recent.length}`)
-      return serializedMessages;
+      if (tokenCount + thisMessage.tokens > config.INPUT_MAX_TOKENS) break;
+      
+      tokenCount += thisMessage.tokens;
+      serializedMessages.unshift(thisMessage.serializeForRequest());
     }
-
-
-    return this.recent.slice(start).map((message) => {
-      return {
-        role: message.role,
-        content: message.content,
-      }
-    });
+    
+    if (condition) serializedMessages.unshift(condition.serializeForRequest());
+    const systemMessages = condition ? 1 : 0;
+    
+    console.log(`Messages in request: ${serializedMessages.length}/${this.history.length + systemMessages}`)
+    
+    return serializedMessages;
   }
 }
