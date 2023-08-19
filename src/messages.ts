@@ -90,11 +90,12 @@ export class Messages {
     }
   }
 
-  serializeForRequest(condition: Condition | null) {
+  serializeForRequest(condition: Condition | null, memory: Message | null) {
     let tokenCount = 0;
     let serializedMessages: ChatCompletionRequestMessage[] = [];
     
     if (condition) tokenCount += condition.tokens;
+    if (memory) tokenCount += memory.tokens;
 
     for (let i = this.history.length - 1; i >= 0; i--) {
       let thisMessage = this.history[i];
@@ -104,11 +105,20 @@ export class Messages {
       tokenCount += thisMessage.tokens;
       serializedMessages.unshift(thisMessage.serializeForRequest());
     }
+
+    let systemMessageCount = 0;
+
+    if (memory) {
+      serializedMessages.unshift(memory.serializeForRequest());
+      systemMessageCount++;
+    }
+
+    if (condition) {
+      serializedMessages.unshift(condition.serializeForRequest());
+      systemMessageCount++;
+    }
     
-    if (condition) serializedMessages.unshift(condition.serializeForRequest());
-    const systemMessages = condition ? 1 : 0;
-    
-    console.log(`Messages in request: ${serializedMessages.length}/${this.history.length + systemMessages}`)
+    console.log(`Request Composition - ${serializedMessages.length}/${this.history.length} history - ${systemMessageCount} system`)
     
     return serializedMessages;
   }

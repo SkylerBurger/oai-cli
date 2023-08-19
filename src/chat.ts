@@ -21,6 +21,7 @@ import { CreateCompletionResponseUsage } from "openai";
 export class Chat {
   client: OAIClient;
   condition: Condition | null = null;
+  memory: Message | null = null;
   summary: Message | null = null;
   messages: Messages;
   chatCost: number = 0;
@@ -73,6 +74,7 @@ export class Chat {
   get actionMap(): { [key: string]: () => Promise<void> | void } {
     return {
       "": async () => await this.prompt(),
+      "m": async () => await this.setMemory(),
       "p": async () => await this.prompt(),
       "s": async () => await this.saveChat(),
       "t": async () => await this.transcribeChat(),
@@ -82,7 +84,7 @@ export class Chat {
 
   async selectAction() {
     ln.orange("Select an action:");
-    ln.yellow("[P] Prompt (default) - [X] Close")
+    ln.yellow("[P] Prompt (default) - [M] Memory - [X] Close")
     ln.yellow("[S] Save Chat Session - [T] Transcribe Chat");
     const input = await question("");
     ln.blank();
@@ -94,8 +96,29 @@ export class Chat {
     }
   }
 
+  async setMemory(memoryText: string | null = null) {
+    if (memoryText) {
+      this.memory = new Message("system", `Reference Notes: ${memoryText}`);
+      return;
+    }
+
+    if (this.memory) {
+      ln.green("Current Memory:");
+      ln.normal(this.memory.content);
+      ln.blank();
+    }
+
+    const userInput = await question("New Memory: ['Enter' with no input to cancel]");
+    if (userInput) {
+      this.memory = new Message("system", `Reference Notes: ${userInput}`);
+      ln.green("Memory set!");
+    }
+
+    ln.blank();
+  }
+
   async prompt() {
-    const input = await question("Prompt:  ['Enter' for options]");
+    const input = await question("Prompt:  ['Enter' with no input for options]");
     if (!input) {
       ln.blank();
       await this.selectAction();
@@ -103,10 +126,10 @@ export class Chat {
     }
 
     this.messages.addMessage({ role: "user", content: input});
-    ln.yellow("Awaiting reply...");
     let response: ChatResponse;
     try {
-      response = await this.client.requestChatCompletion(this.messages.serializeForRequest(this.condition));
+      response = await this.client.requestChatCompletion(this.messages.serializeForRequest(this.condition, this.memory));
+      ln.yellow("Awaiting reply...");
     } catch (err) {
       ln.red("Error while requesting chat completion...");
       console.error(err);
@@ -193,6 +216,9 @@ export class Chat {
     if (chatState.condition) {
       this.condition = new Condition(chatState.condition.name, chatState.condition.instructions);
     }
+    if (chatState.memory) {
+      this.setMemory(chatState.memory);
+    }
   }
 
   async saveChat() {
@@ -220,6 +246,7 @@ export class Chat {
       condition: this.condition ?
         { name: this.condition.name, instructions: this.condition.instructions }
         : null,
+      memory: this.memory ? this.memory.content : null,
     });
   }
 }

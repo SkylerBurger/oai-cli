@@ -17,6 +17,7 @@ export interface ChatState {
     name: string;
     instructions: string;
   };
+  memory: string;
 }
 
 export interface ContextSize {
