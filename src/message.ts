@@ -4,6 +4,7 @@ import {
   ChatCompletionRequestMessageRoleEnum, 
   CreateCompletionResponseUsage, 
 } from "openai"
+import { removeStopwords, eng } from 'stopword';
 
 import ln from './formatting.js';
 
@@ -41,9 +42,15 @@ export class Message {
     return encode(content).length;
   }
 
-  serializeForRequest(): ChatCompletionRequestMessage {
+  serializeForRequest(reduceWords: boolean = false): ChatCompletionRequestMessage {
     let role = this.role;
-    let content = this.content;
+    let content = '';
+    if (reduceWords) {
+      let goWords = removeStopwords(this.content.split(' '), eng);
+      content = goWords.join(' ');
+    } else {
+      content = this.content;
+    }
     return { role, content };
   }
 }

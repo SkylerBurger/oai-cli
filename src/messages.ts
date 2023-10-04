@@ -102,8 +102,15 @@ export class Messages {
 
       if (tokenCount + thisMessage.tokens > config.INPUT_MAX_TOKENS) break;
       
+      let removeStopwords = false;
+      if (config.REMOVE_STOPWORDS && i < this.history.length - 2) {
+        removeStopwords = true;
+        serializedMessages.unshift(thisMessage.serializeForRequest(removeStopwords));
+      } else {
+        serializedMessages.unshift(thisMessage.serializeForRequest());
+      }
       tokenCount += thisMessage.tokens;
-      serializedMessages.unshift(thisMessage.serializeForRequest());
+
     }
 
     let systemMessageCount = 0;
@@ -118,7 +125,7 @@ export class Messages {
       systemMessageCount++;
     }
     
-    console.log(`Request Composition - ${serializedMessages.length}/${this.history.length} history - ${systemMessageCount} system`)
+    console.log(`Request Composition - ${serializedMessages.length - systemMessageCount}/${this.history.length} history - ${systemMessageCount} system`)
     
     return serializedMessages;
   }

@@ -9,4 +9,5 @@ export default {
   LOG_USAGE: process.env.LOG_USAGE || false,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   OUTPUT_PATH: process.env.OUTPUT_PATH || "./output",
+  REMOVE_STOPWORDS: process.env.REMOVE_STOPWORDS || false,
 };

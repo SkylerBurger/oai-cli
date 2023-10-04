@@ -128,8 +128,8 @@ export class Chat {
     this.messages.addMessage({ role: "user", content: input});
     let response: ChatResponse;
     try {
-      response = await this.client.requestChatCompletion(this.messages.serializeForRequest(this.condition, this.memory));
       ln.yellow("Awaiting reply...");
+      response = await this.client.requestChatCompletion(this.messages.serializeForRequest(this.condition, this.memory));
     } catch (err) {
       ln.red("Error while requesting chat completion...");
       console.error(err);
