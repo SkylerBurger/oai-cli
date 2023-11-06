@@ -56,3 +56,9 @@ export const gpt4 = new GPTModel(
     { name: "gpt-4-32k", maxTokens: 32768, inputCost: .006, outputCost: .012, tokenDenominator: 1000},
   ]
 )
+
+export const gpt4Turbo = new GPTModel(
+  [
+    { name: "gpt-4-1106-preview", maxTokens: 128000, inputCost: .01, outputCost: .03, tokenDenominator: 1000},
+  ]
+)

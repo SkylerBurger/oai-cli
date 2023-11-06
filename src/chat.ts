@@ -13,7 +13,7 @@ import { question } from "./input.js";
 import { ChatState, ChatResponse } from "./interfaces.js";
 import { Message } from "./message.js";
 import { Messages } from "./messages.js";
-import { gpt4 } from "./models.js";
+import { gpt4Turbo } from "./models.js";
 import { OAIClient } from "./openai.js";
 import { CreateCompletionResponseUsage } from "openai";
 
@@ -27,7 +27,7 @@ export class Chat {
   chatCost: number = 0;
 
   constructor() {
-    this.client = new OAIClient(gpt4);
+    this.client = new OAIClient(gpt4Turbo);
     this.messages = new Messages();
   }
 
