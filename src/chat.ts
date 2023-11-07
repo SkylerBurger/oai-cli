@@ -236,8 +236,11 @@ export class Chat {
   }
 
   writeSaveToFile(filepath: string | null = null) {
-    if (!filepath) filepath = `${config.OUTPUT_PATH}/chat_backup.json`;
-    writeFileSync(filepath, this.json(), "utf-8");
+    if (!filepath) {
+      filepath = `${config.OUTPUT_PATH}/chat_backup.json`;
+      if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
+    }
+    writeFileSync(filepath, this.json(), { encoding: 'utf-8', flag: 'wx' });
   }
 
   json(): string {
