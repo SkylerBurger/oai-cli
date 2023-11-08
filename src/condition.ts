@@ -61,6 +61,7 @@ export class ConditionManager {
       const newCondition = new Condition(name, instructions);
       this.conditions.push(newCondition);
       ln.green(`Condition Added: ${ newCondition.name }`);
+      this.saveConditions();
       return newCondition
     }
     return null;

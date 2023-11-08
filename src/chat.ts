@@ -240,7 +240,7 @@ export class Chat {
       filepath = `${config.OUTPUT_PATH}/chat_backup.json`;
       if (!existsSync(config.OUTPUT_PATH)) mkdirSync(config.OUTPUT_PATH);
     }
-    writeFileSync(filepath, this.json(), { encoding: 'utf-8', flag: 'wx' });
+    writeFileSync(filepath, this.json(), { encoding: 'utf-8', flag: 'w' });
   }
 
   json(): string {
