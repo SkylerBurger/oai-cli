@@ -1,0 +1,36 @@
+html, body {
+    height: 100%;
+    width: auto;
+    background-color: rgb(49, 17, 60);
+}
+
+#timeline {
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    width: 70%;
+    max-width: 1024px;
+    margin: 10px auto;
+    padding: 20px;
+    font-size: 20px;
+    font-family: 'Oldenburg', serif;
+    color:rgb(196, 172, 140);
+    white-space: pre-line;
+    border: 1px solid rgb(196, 172, 140);
+    border-radius: 5px;
+}
+
+.container:focus {
+    box-shadow: 0 0 10px 5px #48e0a3;
+}
+
+.stringify {
+    display: inline-block;
+    margin: auto;
+}
+
+.user-input {
+    background-color: rgba(255, 255, 255, 0.1);
+}

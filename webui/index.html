@@ -5,70 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Solway:wght@700&display=swap" rel="stylesheet">
-    <title>OAI WebUI</title>
-    <style>
-        html, body {
-            height: 100%;
-            width: 100%;
-            background-color: rgb(49, 17, 60);
-        }
-        .container {
-            width: 70%;
-            margin: 10px auto;
-            padding: 10px;
-            font-size: 20px;
-            font-family: 'Solway', serif;
-            color:rgb(196, 172, 140);
-            white-space: pre-line;
-        }
-        .user-input {
-            background-color: rgba(255, 255, 255, 0.15);
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Oldenburg&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <title>OAI WebUI Proof of Concept</title>
 </head>
 <body>
     <div id="timeline"></div>
-    <script>
-        // Read in JSON file
-        const jsonFile = new XMLHttpRequest();
-        jsonFile.open("GET", "../output/chat_backup.json", true);
-        jsonFile.send();
-          
-        jsonFile.onload = function() {
-            const jsonString = jsonFile.responseText;
-            const json = JSON.parse(jsonString);
-
-            // Target element
-            const timelineElement = document.getElementById('timeline');
-            
-            // Iterate over history
-            for (let i = 0; i < json.messages.history.length; i++) {
-                const message = json.messages.history[i];
-                const lines = message.content.split("\n");
-
-                // Container
-                const container = document.createElement("div");
-                container.setAttribute("contenteditable", "true");
-                container.classList.add('container');
-                if (message.role === "user") {
-                    container.classList.add("user-input");
-                }
-                
-                // Content and space
-                for (let j = 0; j < lines.length; j++) {
-                    const textDiv = document.createElement("div");
-                    textDiv.textContent = lines[j];
-                    container.appendChild(textDiv);
-
-                    const spacer = document.createElement("div");
-                    spacer.innerHTML = "<br />";
-                    container.appendChild(spacer);
-                }
-
-                timelineElement.appendChild(container);
-            }
-        }
-      </script>
+    <script src="app.js"></script>
 </body>
 </html>
