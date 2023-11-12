@@ -1,8 +1,10 @@
-import {
+import OpenAI, {
   ChatCompletionRequestMessage,
   CreateCompletionResponseUsage,
   Configuration,
   OpenAIApi,
+  ImagesResponse,
+  CreateImageRequest,
 } from "openai";
 
 import config from "./config.js";
@@ -76,6 +78,15 @@ export class OAIClient {
     const assistantMessage = new Message("assistant", content)
     const cost: number = this.calculateRequestCost();
     return { message: assistantMessage, cost, tokenUsage: this.tokenUsage };
+  }
+
+  async requestImageGeneration(prompt: string) {
+    const response = await this.api.createImage({
+      prompt: prompt,
+      n:1,
+      size: "1024x1024",
+    });
+    return response.data;
   }
 
   async requestChatSummary(messages: ChatCompletionRequestMessage[]) {

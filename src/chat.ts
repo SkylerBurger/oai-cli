@@ -41,6 +41,10 @@ export class Chat {
 
   async configure() {
     ln.greenBanner("STARTING UP!");
+    const imageGeneration = await question("Try image generation? [y/N]");
+    if (imageGeneration.toLowerCase() === "y") {
+      await this.promptForImage();
+    }
     const loadChatReply = await question("Reload previous chat? [y/N]");
     if (loadChatReply.toLowerCase() === "y") {
       try {
@@ -74,6 +78,7 @@ export class Chat {
   get actionMap(): { [key: string]: () => Promise<void> | void } {
     return {
       "": async () => await this.prompt(),
+      "i": async () => await this.promptForImage(),
       "m": async () => await this.setMemory(),
       "p": async () => await this.prompt(),
       "s": async () => await this.saveChat(),
@@ -84,7 +89,8 @@ export class Chat {
 
   async selectAction() {
     ln.orange("Select an action:");
-    ln.yellow("[P] Prompt (default) - [M] Memory - [X] Close")
+    ln.yellow("[P] Prompt (default) - [M] Memory - [X] Close");
+    ln.yellow("[I] Image Generation")
     ln.yellow("[S] Save Chat Session - [T] Transcribe Chat");
     const input = await question("");
     ln.blank();
@@ -145,6 +151,23 @@ export class Chat {
     }
     ln.blank();
     this.writeSaveToFile();
+  }
+
+  async promptForImage() {
+    const input = await question("Image Prompt: ");
+    if (!input) {
+      ln.blank();
+      await this.selectAction();
+      return;
+    }
+    ln.yellow("Awaiting reply...");
+    const imageResponse = await this.client.requestImageGeneration(input);
+    if (imageResponse.data.length > 0) {
+      ln.green("Response:");
+      ln.normal(imageResponse.data[0].url as string);
+    } else {
+      ln.yellow("No image was generated.");
+    }
   }
 
   async exit() {
